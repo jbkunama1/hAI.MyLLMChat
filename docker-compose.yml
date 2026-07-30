@@ -1,0 +1,18 @@
+services:
+  hai-myllmchat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hai-myllmchat
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - hai_data:/data
+    environment:
+      - DATA_DIR=/data
+      - TZ=Europe/Berlin
+
+volumes:
+  hai_data:
+    driver: local
