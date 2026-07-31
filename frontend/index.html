@@ -8,7 +8,6 @@
 </head>
 <body>
   <div class="shell">
-    <!-- Mobile Topbar -->
     <div class="mobile-topbar">
       <button id="menuToggle" class="icon-button" title="Menü">☰</button>
       <span class="mobile-title">hAI.MyLLMChat</span>
@@ -17,7 +16,6 @@
 
     <div class="overlay hidden" id="sidebarOverlay"></div>
 
-    <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="brand">
@@ -47,7 +45,6 @@
       </div>
     </aside>
 
-    <!-- Main -->
     <main class="main">
       <header class="top-bar">
         <div class="model-select-wrap">
@@ -89,7 +86,6 @@
     </main>
   </div>
 
-  <!-- Login-Modal -->
   <div id="loginModal" class="modal hidden">
     <div class="modal-content">
       <header class="modal-header">
@@ -114,7 +110,6 @@
     </div>
   </div>
 
-  <!-- Settings-Modal mit Tabs -->
   <div id="settingsModal" class="modal hidden">
     <div class="modal-content large">
       <header class="modal-header">
@@ -126,6 +121,7 @@
         <button class="tab-btn active" data-tab="tab-chat">Chat</button>
         <button class="tab-btn" data-tab="tab-image">Bild</button>
         <button class="tab-btn" data-tab="tab-mcp">MCP</button>
+        <button class="tab-btn" data-tab="tab-theme">Design</button>
       </div>
 
       <div class="modal-body">
@@ -166,8 +162,23 @@
           </label>
         </div>
 
+        <div class="tab-panel" id="tab-theme">
+          <label class="field checkbox-field">
+            <input id="cfgLightMode" type="checkbox" />
+            <span>Light Mode</span>
+          </label>
+          <p class="hint" style="margin-top:0;">Farbschema wählen:</p>
+          <div class="theme-grid">
+            <div class="theme-swatch" data-theme="indigo" title="Indigo"></div>
+            <div class="theme-swatch" data-theme="orange" title="Orange"></div>
+            <div class="theme-swatch" data-theme="emerald" title="Emerald"></div>
+            <div class="theme-swatch" data-theme="rose" title="Rose"></div>
+            <div class="theme-swatch" data-theme="slate" title="Slate"></div>
+          </div>
+        </div>
+
         <button id="saveConfig" class="primary-btn">Speichern</button>
-        <p class="hint">Wird persistiert in <code>/data/config.json</code>.</p>
+        <p class="hint">Backend-Konfiguration wird persistiert in <code>/data/config.json</code>. Design wird lokal im Browser gespeichert.</p>
       </div>
     </div>
   </div>
