@@ -1,7 +1,7 @@
 # hAI.MyLLMChat
 
 <p align="center">
-  <img src="./logo_chat.png" alt="hAI.MyLLMChat Logo" width="140" />
+  <img src="./logo_chat.png" alt="hAI.MyLLMChat Logo" width="400" />
 </p>
 
 <!-- badges: start -->
