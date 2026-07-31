@@ -7,47 +7,83 @@
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
-  <div class="app">
-    <header class="app-header">
-      <div>
-        <h1>hAI.MyLLMChat</h1>
-        <p class="subtitle">Lightweight WebUI · ENV-konfigurierbar · Docker-only</p>
-      </div>
-      <div>
-        <button id="loginButton" class="icon-button" title="Login">🔒</button>
-        <button id="settingsButton" class="icon-button" title="Einstellungen">⚙️</button>
-      </div>
-    </header>
+  <div class="shell">
+    <!-- Mobile Topbar -->
+    <div class="mobile-topbar">
+      <button id="menuToggle" class="icon-button" title="Menü">☰</button>
+      <span class="mobile-title">hAI.MyLLMChat</span>
+      <button id="settingsButtonMobile" class="icon-button" title="Einstellungen">⚙️</button>
+    </div>
 
-    <main class="app-main">
-      <section class="sidebar">
-        <div class="section-title">Verbindung</div>
-        <div id="backendInfo" class="backend-info">
-          <div><strong>Chat:</strong> <span id="chatBackendName">lädt…</span></div>
-          <div class="backend-url" id="chatBackendUrl"></div>
-          <div><strong>Image:</strong> <span id="imageBackendName">lädt…</span></div>
-          <div class="backend-url" id="imageBackendUrl"></div>
-          <div><strong>MCP:</strong> <span id="mcpStatus">lädt…</span></div>
+    <div class="overlay hidden" id="sidebarOverlay"></div>
+
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <span class="brand-dot"></span>
+          <span class="brand-name">hAI.MyLLMChat</span>
+        </div>
+        <button id="closeSidebar" class="icon-button mobile-only" title="Schließen">✕</button>
+      </div>
+
+      <button id="newChatButton" class="new-chat-btn">+ Neuer Chat</button>
+
+      <div class="conversation-list" id="conversationList">
+        <div class="conversation-item active" data-id="default">
+          <span class="conv-title">Aktueller Chat</span>
+        </div>
+      </div>
+
+      <div class="sidebar-footer">
+        <div class="status-line">
+          <span class="status-dot" id="statusDot"></span>
+          <span id="statusText">Verbinde…</span>
+        </div>
+        <div class="sidebar-actions">
+          <button id="loginButton" class="ghost-btn">🔒 Login</button>
+          <button id="settingsButton" class="ghost-btn">⚙️ Einstellungen</button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main -->
+    <main class="main">
+      <header class="top-bar">
+        <div class="model-select-wrap">
+          <label class="model-label">Modell</label>
+          <select id="modelSelect" class="model-select">
+            <option value="">Lädt…</option>
+          </select>
+        </div>
+        <div class="top-bar-right">
+          <span class="pill" id="mcpPill">MCP: –</span>
+        </div>
+      </header>
+
+      <section class="chat-area">
+        <div id="messages" class="messages">
+          <div class="empty-state" id="emptyState">
+            <div class="empty-icon">💬</div>
+            <h2>Willkommen bei hAI.MyLLMChat</h2>
+            <p>Stelle eine Frage, lade eine Datei zur Analyse hoch oder generiere ein Bild.</p>
+          </div>
         </div>
 
-        <div class="section-title">Kontext</div>
-        <textarea
-          id="systemPrompt"
-          class="system-prompt"
-          placeholder="Systemprompt / Kontext (optional)"
-        ></textarea>
-      </section>
-
-      <section class="chat">
-        <div id="messages" class="messages"></div>
-        <form id="chatForm" class="chat-input-bar">
-          <textarea
-            id="userInput"
-            class="chat-input"
-            rows="1"
-            placeholder="Nachricht schreiben und Enter drücken..."
-          ></textarea>
-          <button type="submit" class="send-button">Senden</button>
+        <form id="chatForm" class="composer">
+          <div class="composer-inner">
+            <button type="button" id="uploadButton" class="icon-button" title="Datei anhängen">📎</button>
+            <input type="file" id="fileInput" hidden multiple />
+            <textarea
+              id="userInput"
+              class="composer-input"
+              rows="1"
+              placeholder="Nachricht schreiben…"
+            ></textarea>
+            <button type="button" id="imageModeButton" class="icon-button" title="Bild generieren">🎨</button>
+            <button type="submit" class="send-btn" id="sendBtn">➤</button>
+          </div>
+          <div id="attachmentPreview" class="attachment-preview"></div>
         </form>
       </section>
     </main>
@@ -61,72 +97,77 @@
         <button id="closeLogin" class="icon-button">✕</button>
       </header>
       <div class="modal-body">
-        <label>
-          Benutzername
+        <label class="field">
+          <span>Benutzername</span>
           <input id="loginUser" type="text" />
         </label>
-        <label>
-          Passwort
+        <label class="field">
+          <span>Passwort</span>
           <input id="loginPass" type="password" />
         </label>
-        <button id="loginSubmit" class="send-button" style="margin-top:0.75rem;">Einloggen</button>
+        <button id="loginSubmit" class="primary-btn">Einloggen</button>
         <p class="hint">
-          Zugangsdaten sind über ENV gesetzt:
-          <code>HAI_ADMIN_USER</code> / <code>HAI_ADMIN_PASSWORD</code>
-          oder alternativ <code>HAI_ADMIN_TOKEN</code>.
+          Zugangsdaten via ENV: <code>HAI_ADMIN_USER</code> / <code>HAI_ADMIN_PASSWORD</code>
+          oder <code>HAI_ADMIN_TOKEN</code>.
         </p>
       </div>
     </div>
   </div>
 
-  <!-- Settings-Modal -->
+  <!-- Settings-Modal mit Tabs -->
   <div id="settingsModal" class="modal hidden">
-    <div class="modal-content">
+    <div class="modal-content large">
       <header class="modal-header">
         <h2>Einstellungen</h2>
         <button id="closeSettings" class="icon-button">✕</button>
       </header>
+
+      <div class="tabs">
+        <button class="tab-btn active" data-tab="tab-chat">Chat</button>
+        <button class="tab-btn" data-tab="tab-image">Bild</button>
+        <button class="tab-btn" data-tab="tab-mcp">MCP</button>
+      </div>
+
       <div class="modal-body">
-        <h3>Chat-Backend</h3>
-        <label>
-          Name
-          <input id="cfgChatName" type="text" />
-        </label>
-        <label>
-          Base URL
-          <input id="cfgChatBaseUrl" type="text" />
-        </label>
-        <label>
-          Model
-          <input id="cfgChatModel" type="text" />
-        </label>
+        <div class="tab-panel active" id="tab-chat">
+          <label class="field">
+            <span>Name</span>
+            <input id="cfgChatName" type="text" placeholder="z.B. OpenRouter" />
+          </label>
+          <label class="field">
+            <span>Base URL</span>
+            <input id="cfgChatBaseUrl" type="text" placeholder="https://openrouter.ai/api/v1" />
+          </label>
+          <label class="field">
+            <span>Modell</span>
+            <input id="cfgChatModel" type="text" placeholder="z.B. gpt-4o-mini" />
+          </label>
+        </div>
 
-        <h3>Image-Backend</h3>
-        <label>
-          Name
-          <input id="cfgImageName" type="text" />
-        </label>
-        <label>
-          Base URL
-          <input id="cfgImageBaseUrl" type="text" />
-        </label>
+        <div class="tab-panel" id="tab-image">
+          <label class="field">
+            <span>Name</span>
+            <input id="cfgImageName" type="text" placeholder="z.B. OpenRouter-Images" />
+          </label>
+          <label class="field">
+            <span>Base URL</span>
+            <input id="cfgImageBaseUrl" type="text" placeholder="https://openrouter.ai/api/v1" />
+          </label>
+        </div>
 
-        <h3>MCP</h3>
-        <label>
-          Enabled
-          <input id="cfgMcpEnabled" type="checkbox" />
-        </label>
-        <label>
-          Base URL
-          <input id="cfgMcpBaseUrl" type="text" />
-        </label>
+        <div class="tab-panel" id="tab-mcp">
+          <label class="field checkbox-field">
+            <input id="cfgMcpEnabled" type="checkbox" />
+            <span>MCP aktivieren</span>
+          </label>
+          <label class="field">
+            <span>Base URL</span>
+            <input id="cfgMcpBaseUrl" type="text" placeholder="http://mcpo:8000" />
+          </label>
+        </div>
 
-        <button id="saveConfig" class="send-button" style="margin-top:0.75rem;">
-          Konfiguration speichern
-        </button>
-        <p class="hint">
-          Änderungen werden im Volume unter <code>/data/config.json</code> persistiert.
-        </p>
+        <button id="saveConfig" class="primary-btn">Speichern</button>
+        <p class="hint">Wird persistiert in <code>/data/config.json</code>.</p>
       </div>
     </div>
   </div>
