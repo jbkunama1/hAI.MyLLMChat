@@ -1,3 +1,20 @@
+let adminToken = null;
+let config = null;
+let history = [];
+
+function loadAdminToken() {
+  adminToken = localStorage.getItem("hai_admin_token") || null;
+}
+
+function saveAdminToken(token) {
+  adminToken = token;
+  if (token) {
+    localStorage.setItem("hai_admin_token", token);
+  } else {
+    localStorage.removeItem("hai_admin_token");
+  }
+}
+
 async function fetchConfig() {
   try {
     const res = await fetch("/api/config");
@@ -7,6 +24,25 @@ async function fetchConfig() {
     console.error("Config error:", e);
     return null;
   }
+}
+
+async function updateConfigOnServer(newCfg) {
+  if (!adminToken) {
+    throw new Error("Nicht eingeloggt.");
+  }
+  const res = await fetch("/api/config/update", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Admin-Auth": adminToken,
+    },
+    body: JSON.stringify(newCfg),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`Config-Update-Fehler: ${res.status} ${txt}`);
+  }
+  return await res.json();
 }
 
 function appendMessage(role, text) {
@@ -23,61 +59,12 @@ function autoResizeTextarea(el) {
   el.style.height = el.scrollHeight + "px";
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
-  const backendInfo = document.getElementById("backendInfo");
-  const chatBackendName = document.getElementById("chatBackendName");
-  const chatBackendUrl = document.getElementById("chatBackendUrl");
-  const imageBackendName = document.getElementById("imageBackendName");
-  const imageBackendUrl = document.getElementById("imageBackendUrl");
-  const mcpStatus = document.getElementById("mcpStatus");
-
-  const userInput = document.getElementById("userInput");
-  const chatForm = document.getElementById("chatForm");
-  const settingsButton = document.getElementById("settingsButton");
-  const settingsModal = document.getElementById("settingsModal");
-  const closeSettings = document.getElementById("closeSettings");
-
-  // Config laden
-  const cfg = await fetchConfig();
-  if (cfg) {
-    chatBackendName.textContent = cfg.chat?.name || "nicht gesetzt";
-    chatBackendUrl.textContent = cfg.chat?.base_url || "";
-    imageBackendName.textContent = cfg.image?.name || "nicht gesetzt";
-    imageBackendUrl.textContent = cfg.image?.base_url || "";
-    mcpStatus.textContent = cfg.mcp?.enabled ? `aktiv (${cfg.mcp.base_url || ""})` : "inaktiv";
-  } else {
-    backendInfo.textContent = "Konfiguration konnte nicht geladen werden (siehe Browser-Konsole).";
+async function sendChatMessage(messages, model) {
+  const body = { messages };
+  if (model) {
+    body.model = model;
   }
 
-  // Textarea Auto-Resize
-  userInput.addEventListener("input", () => autoResizeTextarea(userInput));
-
-  // Chat-Form (noch ohne echten LLM-Call – Placeholder)
-  chatForm.addEventListener("submit", async (ev) => {
-    ev.preventDefault();
-    const text = userInput.value.trim();
-    if (!text) return;
-    appendMessage("user", text);
-    userInput.value = "";
-    autoResizeTextarea(userInput);
-
-    // Placeholder-Assistent
-    appendMessage(
-      "assistant",
-      "Antwort kommt später von deinem konfigurierten LLM-Backend.\n\n(Backend-Endpunkt /api/chat ist noch zu verdrahten.)"
-    );
-  });
-
-  // Settings-Modal
-  settingsButton.addEventListener("click", () => {
-    settingsModal.classList.remove("hidden");
-  });
-  closeSettings.addEventListener("click", () => {
-    settingsModal.classList.add("hidden");
-  });
-  settingsModal.addEventListener("click", (e) => {
-    if (e.target === settingsModal) {
-      settingsModal.classList.add("hidden");
-    }
-  });
-});
+  const res = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content
