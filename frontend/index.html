@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>hAI.MyLLMChat</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="app-header">
+      <div>
+        <h1>hAI.MyLLMChat</h1>
+        <p class="subtitle">Lightweight WebUI · ENV-konfigurierbar · Docker-only</p>
+      </div>
+      <button id="settingsButton" class="icon-button" title="Einstellungen">⚙️</button>
+    </header>
+
+    <main class="app-main">
+      <section class="sidebar">
+        <div class="section-title">Verbindung</div>
+        <div id="backendInfo" class="backend-info">
+          <div><strong>Chat:</strong> <span id="chatBackendName">lädt…</span></div>
+          <div class="backend-url" id="chatBackendUrl"></div>
+          <div><strong>Image:</strong> <span id="imageBackendName">lädt…</span></div>
+          <div class="backend-url" id="imageBackendUrl"></div>
+          <div><strong>MCP:</strong> <span id="mcpStatus">lädt…</span></div>
+        </div>
+
+        <div class="section-title">Kontext</div>
+        <textarea id="systemPrompt" class="system-prompt" placeholder="Systemprompt / Kontext (optional)"></textarea>
+      </section>
+
+      <section class="chat">
+        <div id="messages" class="messages"></div>
+        <form id="chatForm" class="chat-input-bar">
+          <textarea
+            id="userInput"
+            class="chat-input"
+            rows="1"
+            placeholder="Nachricht schreiben und Enter drücken..."
+          ></textarea>
+          <button type="submit" class="send-button">Senden</button>
+        </form>
+      </section>
+    </main>
+  </div>
+
+  <div id="settingsModal" class="modal hidden">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2>Einstellungen</h2>
+        <button id="closeSettings" class="icon-button">✕</button>
+      </header>
+      <div class="modal-body">
+        <p>
+          Die Backends (Chat, Image, MCP) werden ausschließlich über
+          Environment-Variablen konfiguriert (<code>HAI_DEFAULT_...</code>, <code>HAI_MCP_...</code>).
+        </p>
+        <p>
+          Diese UI liest die aktuelle Konfiguration über <code>/api/config</code>
+          aus dem Backend aus.
+        </p>
+        <p>
+          Weitere Funktionen (z.B. Model-Auswahl, MCP-Tools) kannst du später
+          direkt im Code erweitern.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
