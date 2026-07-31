@@ -13,7 +13,10 @@
         <h1>hAI.MyLLMChat</h1>
         <p class="subtitle">Lightweight WebUI · ENV-konfigurierbar · Docker-only</p>
       </div>
-      <button id="settingsButton" class="icon-button" title="Einstellungen">⚙️</button>
+      <div>
+        <button id="loginButton" class="icon-button" title="Login">🔒</button>
+        <button id="settingsButton" class="icon-button" title="Einstellungen">⚙️</button>
+      </div>
     </header>
 
     <main class="app-main">
@@ -28,7 +31,11 @@
         </div>
 
         <div class="section-title">Kontext</div>
-        <textarea id="systemPrompt" class="system-prompt" placeholder="Systemprompt / Kontext (optional)"></textarea>
+        <textarea
+          id="systemPrompt"
+          class="system-prompt"
+          placeholder="Systemprompt / Kontext (optional)"
+        ></textarea>
       </section>
 
       <section class="chat">
@@ -46,6 +53,33 @@
     </main>
   </div>
 
+  <!-- Login-Modal -->
+  <div id="loginModal" class="modal hidden">
+    <div class="modal-content">
+      <header class="modal-header">
+        <h2>Login</h2>
+        <button id="closeLogin" class="icon-button">✕</button>
+      </header>
+      <div class="modal-body">
+        <label>
+          Benutzername
+          <input id="loginUser" type="text" />
+        </label>
+        <label>
+          Passwort
+          <input id="loginPass" type="password" />
+        </label>
+        <button id="loginSubmit" class="send-button" style="margin-top:0.75rem;">Einloggen</button>
+        <p class="hint">
+          Zugangsdaten sind über ENV gesetzt:
+          <code>HAI_ADMIN_USER</code> / <code>HAI_ADMIN_PASSWORD</code>
+          oder alternativ <code>HAI_ADMIN_TOKEN</code>.
+        </p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings-Modal -->
   <div id="settingsModal" class="modal hidden">
     <div class="modal-content">
       <header class="modal-header">
@@ -53,17 +87,45 @@
         <button id="closeSettings" class="icon-button">✕</button>
       </header>
       <div class="modal-body">
-        <p>
-          Die Backends (Chat, Image, MCP) werden ausschließlich über
-          Environment-Variablen konfiguriert (<code>HAI_DEFAULT_...</code>, <code>HAI_MCP_...</code>).
-        </p>
-        <p>
-          Diese UI liest die aktuelle Konfiguration über <code>/api/config</code>
-          aus dem Backend aus.
-        </p>
-        <p>
-          Weitere Funktionen (z.B. Model-Auswahl, MCP-Tools) kannst du später
-          direkt im Code erweitern.
+        <h3>Chat-Backend</h3>
+        <label>
+          Name
+          <input id="cfgChatName" type="text" />
+        </label>
+        <label>
+          Base URL
+          <input id="cfgChatBaseUrl" type="text" />
+        </label>
+        <label>
+          Model
+          <input id="cfgChatModel" type="text" />
+        </label>
+
+        <h3>Image-Backend</h3>
+        <label>
+          Name
+          <input id="cfgImageName" type="text" />
+        </label>
+        <label>
+          Base URL
+          <input id="cfgImageBaseUrl" type="text" />
+        </label>
+
+        <h3>MCP</h3>
+        <label>
+          Enabled
+          <input id="cfgMcpEnabled" type="checkbox" />
+        </label>
+        <label>
+          Base URL
+          <input id="cfgMcpBaseUrl" type="text" />
+        </label>
+
+        <button id="saveConfig" class="send-button" style="margin-top:0.75rem;">
+          Konfiguration speichern
+        </button>
+        <p class="hint">
+          Änderungen werden im Volume unter <code>/data/config.json</code> persistiert.
         </p>
       </div>
     </div>
