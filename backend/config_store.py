@@ -33,7 +33,6 @@ def load_config() -> Dict[str, Any]:
             return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
         except Exception:
             pass
-    # Fallback: Defaults aus ENV
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     save_config(DEFAULT_CONFIG)
     return DEFAULT_CONFIG
