@@ -6,30 +6,43 @@ services:
     container_name: hai-myllmchat
     restart: unless-stopped
 
-    # Port-Mapping: außen 8066, innen 8080
+    # Port-Mapping: außen 8066, innen 8080 (FastAPI)
     ports:
       - "8066:8080"
 
+    # Persistente Daten: SQLite + config.json unter /data
     volumes:
       - hai_data:/data
 
-    # Dein bestehender ENV-Block bleibt hier wie besprochen
     environment:
+      # Basis
       - DATA_DIR=/data
       - TZ=Europe/Berlin
+
+      # Admin-Zugang WebUI
+      # Login über User/Pass: base64("user:pass") im Header X-Admin-Auth
+      # oder direkt HAI_ADMIN_TOKEN als fester Token verwenden
+      - HAI_ADMIN_USER=${HAI_ADMIN_USER}
+      - HAI_ADMIN_PASSWORD=${HAI_ADMIN_PASSWORD}
+      - HAI_ADMIN_TOKEN=${HAI_ADMIN_TOKEN}
+
+      # Default Chat Backend (z.B. OpenRouter, OpenAI, Ollama)
       - HAI_DEFAULT_CHAT_NAME=${HAI_DEFAULT_CHAT_NAME}
       - HAI_DEFAULT_CHAT_BASE_URL=${HAI_DEFAULT_CHAT_BASE_URL}
       - HAI_DEFAULT_CHAT_API_KEY=${HAI_DEFAULT_CHAT_API_KEY}
       - HAI_DEFAULT_CHAT_MODEL=${HAI_DEFAULT_CHAT_MODEL}
+
+      # Default Image Backend
       - HAI_DEFAULT_IMAGE_NAME=${HAI_DEFAULT_IMAGE_NAME}
       - HAI_DEFAULT_IMAGE_BASE_URL=${HAI_DEFAULT_IMAGE_BASE_URL}
       - HAI_DEFAULT_IMAGE_API_KEY=${HAI_DEFAULT_IMAGE_API_KEY}
       - HAI_DEFAULT_IMAGE_ENDPOINT=${HAI_DEFAULT_IMAGE_ENDPOINT}
+
+      # MCP Gateway
       - HAI_MCP_ENABLED=${HAI_MCP_ENABLED}
       - HAI_MCP_BASE_URL=${HAI_MCP_BASE_URL}
       - HAI_MCP_TOKEN=${HAI_MCP_TOKEN}
 
-    # Netzwerk
     networks:
       - highfishNetwork
 
