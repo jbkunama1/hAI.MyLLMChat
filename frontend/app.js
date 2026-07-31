@@ -4,6 +4,7 @@ let history = [];
 let attachments = [];
 let mode = "chat"; // "chat" | "image"
 
+const THEMES = ["indigo", "orange", "emerald", "rose", "slate"];
 const el = (id) => document.getElementById(id);
 
 function loadAdminToken() {
@@ -13,6 +14,38 @@ function saveAdminToken(token) {
   adminToken = token;
   if (token) localStorage.setItem("hai_admin_token", token);
   else localStorage.removeItem("hai_admin_token");
+}
+
+function applyTheme(theme) {
+  if (!THEMES.includes(theme)) theme = "indigo";
+  if (theme === "indigo") {
+    document.documentElement.removeAttribute("data-theme");
+  } else {
+    document.documentElement.setAttribute("data-theme", theme);
+  }
+  localStorage.setItem("hai_theme", theme);
+  document.querySelectorAll(".theme-swatch").forEach((sw) => {
+    sw.classList.toggle("active", sw.dataset.theme === theme);
+  });
+}
+
+function applyMode(mode) {
+  if (mode !== "light" && mode !== "dark") mode = "dark";
+  if (mode === "light") {
+    document.documentElement.setAttribute("data-mode", "light");
+  } else {
+    document.documentElement.removeAttribute("data-mode");
+  }
+  localStorage.setItem("hai_mode", mode);
+  const cb = el("cfgLightMode");
+  if (cb) cb.checked = mode === "light";
+}
+
+function loadThemeAndMode() {
+  const savedTheme = localStorage.getItem("hai_theme") || "indigo";
+  const savedMode = localStorage.getItem("hai_mode") || "dark";
+  applyTheme(savedTheme);
+  applyMode(savedMode);
 }
 
 async function fetchConfig() {
@@ -101,6 +134,8 @@ function appendImageMessage(urls) {
     img.src = u;
     img.style.maxWidth = "100%";
     img.style.borderRadius = "10px";
+    img.style.display = "block";
+    img.style.marginBottom = "0.4rem";
     msg.appendChild(img);
   });
   container.appendChild(msg);
@@ -142,18 +177,11 @@ function buildUserMessageText(rawText) {
     .join("\n\n");
   return `${fileNotes}\n\n${rawText}`.trim();
 }
-
-function openModal(modalEl) {
-  modalEl.classList.remove("hidden");
-}
-function closeModal(modalEl) {
-  modalEl.classList.add("hidden");
-}
-
 document.addEventListener("DOMContentLoaded", async () => {
   loadAdminToken();
+  loadThemeAndMode();
 
-  // --- Sidebar mobile toggle ---
+  // Sidebar mobile toggle
   const sidebar = el("sidebar");
   const overlay = el("sidebarOverlay");
   const openSidebar = () => {
@@ -167,8 +195,9 @@ document.addEventListener("DOMContentLoaded", async () => {
   el("menuToggle").addEventListener("click", openSidebar);
   el("closeSidebar").addEventListener("click", closeSidebarFn);
   overlay.addEventListener("click", closeSidebarFn);
+  el("settingsButtonMobile").addEventListener("click", () => el("settingsButton").click());
 
-  // --- Config laden ---
+  // Config laden
   config = await fetchConfig();
   if (config) {
     setStatus(
@@ -180,7 +209,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     setStatus("error", "Backend nicht erreichbar");
   }
 
-  // --- Modelle laden ---
+  // Modelle laden
   const models = await fetchModels();
   const select = el("modelSelect");
   select.innerHTML = "";
@@ -206,7 +235,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     select.appendChild(opt);
   }
 
-  // --- Textarea auto-resize + Enter-to-send ---
+  // Textarea + Enter-to-send
   const userInput = el("userInput");
   userInput.addEventListener("input", () => autoResize(userInput));
   userInput.addEventListener("keydown", (e) => {
@@ -216,7 +245,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // --- Upload ---
+  // Upload
   el("uploadButton").addEventListener("click", () => el("fileInput").click());
   el("fileInput").addEventListener("change", async (e) => {
     for (const file of e.target.files) {
@@ -232,19 +261,17 @@ document.addEventListener("DOMContentLoaded", async () => {
     e.target.value = "";
   });
 
-  // --- Bild-Modus umschalten ---
+  // Bild-Modus
   const imageBtn = el("imageModeButton");
   imageBtn.addEventListener("click", () => {
     mode = mode === "chat" ? "image" : "chat";
     imageBtn.style.background = mode === "image" ? "var(--accent-soft)" : "transparent";
-    userInput.placeholder =
-      mode === "image" ? "Bildbeschreibung eingeben…" : "Nachricht schreiben…";
+    userInput.placeholder = mode === "image" ? "Bildbeschreibung eingeben…" : "Nachricht schreiben…";
   });
 
-  // --- Chat-Form Submit ---
+  // Chat-Form
   const chatForm = el("chatForm");
   const sendBtn = el("sendBtn");
-
   chatForm.addEventListener("submit", async (ev) => {
     ev.preventDefault();
     const rawText = userInput.value.trim();
@@ -266,8 +293,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           appendImageMessage(urls);
         } else {
           appendMessage("assistant", "Keine Bilder erhalten (Image-Backend prüfen).");
-        }
-      } else {
+                } else {
         const messages = [];
         for (const m of history) messages.push(m);
         messages.push({ role: "user", content: finalText });
@@ -290,23 +316,96 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // --- Login-Modal ---
+  // Login-Modal
   const loginModal = el("loginModal");
-  const openLoginModal = () => openModal(loginModal);
-  el("loginButton").addEventListener("click", openLoginModal);
-  el("closeLogin").addEventListener("click", () => closeModal(loginModal));
+  el("loginButton").addEventListener("click", () => loginModal.classList.remove("hidden"));
+  el("closeLogin").addEventListener("click", () => loginModal.classList.add("hidden"));
   loginModal.addEventListener("click", (e) => {
-    if (e.target === loginModal) closeModal(loginModal);
+    if (e.target === loginModal) loginModal.classList.add("hidden");
   });
   el("loginSubmit").addEventListener("click", () => {
     const u = el("loginUser").value.trim();
     const p = el("loginPass").value.trim();
     if (!u || !p) return;
     saveAdminToken(btoa(`${u}:${p}`));
-    closeModal(loginModal);
+    loginModal.classList.add("hidden");
     setStatus("online", "Eingeloggt");
   });
 
-  // --- Settings-Modal + Tabs ---
+  // Settings-Modal + Tabs
   const settingsModal = el("settingsModal");
-  const openSettings = () => {
+  const openSettings = () => settingsModal.classList.remove("hidden");
+  const closeSettings = () => settingsModal.classList.add("hidden");
+  el("settingsButton").addEventListener("click", openSettings);
+  el("closeSettings").addEventListener("click", closeSettings);
+  settingsModal.addEventListener("click", (e) => {
+    if (e.target === settingsModal) closeSettings();
+  });
+
+  document.querySelectorAll(".tab-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const tab = btn.dataset.tab;
+      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.remove("active"));
+      document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+      btn.classList.add("active");
+      document.getElementById(tab).classList.add("active");
+    });
+  });
+
+  // Theme-Swatches klicken
+  document.querySelectorAll(".theme-swatch").forEach((sw) => {
+    sw.addEventListener("click", () => applyTheme(sw.dataset.theme));
+  });
+
+  // Light Mode Checkbox
+  const lightCb = el("cfgLightMode");
+  if (lightCb) {
+    lightCb.checked = (localStorage.getItem("hai_mode") || "dark") === "light";
+    lightCb.addEventListener("change", () => {
+      applyMode(lightCb.checked ? "light" : "dark");
+    });
+  }
+
+  // Settings-Felder initial befüllen
+  if (config) {
+    if (config.chat) {
+      el("cfgChatName").value = config.chat.name || "";
+      el("cfgChatBaseUrl").value = config.chat.base_url || "";
+      el("cfgChatModel").value = config.chat.model || "";
+    }
+    if (config.image) {
+      el("cfgImageName").value = config.image.name || "";
+      el("cfgImageBaseUrl").value = config.image.base_url || "";
+    }
+    if (config.mcp) {
+      el("cfgMcpEnabled").checked = !!config.mcp.enabled;
+      el("cfgMcpBaseUrl").value = config.mcp.base_url || "";
+    }
+  }
+
+  // Config speichern (nur Backend-relevante Felder)
+  el("saveConfig").addEventListener("click", async () => {
+    const newCfg = {
+      chat: {
+        name: el("cfgChatName").value || null,
+        base_url: el("cfgChatBaseUrl").value || null,
+        model: el("cfgChatModel").value || null,
+      },
+      image: {
+        name: el("cfgImageName").value || null,
+        base_url: el("cfgImageBaseUrl").value || null,
+      },
+      mcp: {
+        enabled: el("cfgMcpEnabled").checked,
+        base_url: el("cfgMcpBaseUrl").value || null,
+      },
+    };
+    try {
+      await updateConfigOnServer(newCfg);
+      alert("Konfiguration gespeichert. Backend nutzt ab jetzt die neuen Werte.");
+    } catch (err) {
+      console.error(err);
+      alert("Fehler beim Speichern der Konfiguration: " + err.message);
+    }
+  });
+});
