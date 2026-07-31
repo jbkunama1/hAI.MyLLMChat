@@ -2,7 +2,7 @@ import os
 import base64
 from typing import Any, Dict, List
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Body
+from fastapi import FastAPI, HTTPException, Depends, Header, Body, UploadFile, File
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -158,6 +158,36 @@ def get_mcp_config() -> Dict[str, Any]:
     }
 
 
+# ---------- Models-Endpoint (simple) ----------
+
+@app.get("/api/models")
+async def list_models():
+    """
+    Gibt eine einfache Modellliste zurück.
+    Aktuell nur das in der Config gesetzte Modell; kann später durch Provider-API ersetzt werden.
+    """
+    cfg = load_config()
+    model = cfg.get("chat", {}).get("model")
+    if model:
+        return {"models": [model]}
+    return {"models": []}
+
+
+# ---------- File Upload ----------
+
+@app.post("/api/upload")
+async def upload(file: UploadFile = File(...)):
+    """
+    Nimmt eine Datei entgegen und gibt einen kurzen Summary-Text zurück,
+    der im Frontend dem Prompt hinzugefügt werden kann.
+    """
+    return {
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "summary": f"Datei '{file.filename}' wurde hochgeladen und steht für die Analyse bereit."
+    }
+
+
 # ---------- Chat-Endpoint (OpenAI-kompatibel) ----------
 
 @app.post("/api/chat", response_model=ChatResponse)
@@ -236,25 +266,7 @@ async def generate_image(req: ImageRequest):
 
     urls: List[ImageUrl] = []
     try:
-        for item in data.get("data", []):
-            if "url" in item:
-                urls.append(ImageUrl(url=item["url"]))
-    except Exception:
-        raise HTTPException(status_code=500, detail="Unerwartetes Antwortformat vom Image-Backend.")
-
-    return ImageResponse(images=urls)
-
-
-# ---------- MCP-Proxy-Gerüst ----------
-
-@app.get("/api/mcp/tools")
-async def list_mcp_tools():
-    mcp = get_mcp_config()
-    if not mcp["enabled"] or not mcp["base_url"]:
-        return {"enabled": False, "tools": []}
-    return {"enabled": True, "tools": []}
-
-
-# ---------- Static files (Frontend) ----------
-
-app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
+      for item in data.get("data", []):
+          if "url" in item:
+              urls.append(ImageUrl(url=item["url"]))
+    except
