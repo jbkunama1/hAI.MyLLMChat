@@ -30,6 +30,11 @@
     h1 {
       margin-top: 0;
     }
+    code {
+      background: #020617;
+      padding: 0.1rem 0.3rem;
+      border-radius: 0.25rem;
+    }
     @media (max-width: 640px) {
       body {
         padding: 1.5rem;
@@ -40,7 +45,7 @@
 <body>
   <div class="container">
     <h1>hAI.MyLLMChat</h1>
-    <p>Schlanke, konfigurierbare WebUI für LLM-Chat, Bildgenerierung und MCP-Server – optimiert für Docker + Portainer.</p>
+    <p>Schlanke, konfigurierbare WebUI für LLM-Chat, Bildgenerierung und MCP-Server – optimiert für Docker, Portainer und ENV-Deployment.</p>
 
     <div class="badge-row">
       <img src="https://img.shields.io/github/repo-size/jbkunama1/hAI.MyLLMChat" alt="Repo size" />
@@ -58,8 +63,9 @@
       </a>
     </p>
     <p>
-      Deployment: Als Portainer-Stack über die <code>docker-compose.yml</code>;
-      alle Backends (Chat, Image, MCP) werden ausschließlich über Environment-Variablen konfiguriert.
+      Deployment: Als Portainer-Stack über die <code>docker-compose.yml</code>.
+      Der Service läuft im externen Docker-Netzwerk <code>highfishNetwork</code> und mapped
+      den internen Port <code>8080</code> auf <code>8066</code> nach außen.
     </p>
 
     <h2>ENV-Variablen (Überblick)</h2>
@@ -72,7 +78,7 @@
     <h2>Hinweis</h2>
     <p>
       Diese GitHub-Pages-Seite ist nur eine Projektbeschreibung. Die eigentliche WebUI läuft im Docker-Container
-      (FastAPI) und ist standardmäßig unter Port <code>8080</code> erreichbar.
+      (FastAPI) und ist standardmäßig unter <code>http://&lt;host&gt;:8066</code> erreichbar.
     </p>
   </div>
 </body>
