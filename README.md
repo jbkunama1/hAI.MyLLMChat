@@ -1,5 +1,9 @@
 # hAI.MyLLMChat
 
+<p align="center">
+  <img src="./logo_chat.png" alt="hAI.MyLLMChat Logo" width="140" />
+</p>
+
 <!-- badges: start -->
 ![Repo size](https://img.shields.io/github/repo-size/jbkunama1/hAI.MyLLMChat)
 ![Last commit](https://img.shields.io/github/last-commit/jbkunama1/hAI.MyLLMChat)
