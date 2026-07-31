@@ -397,4 +397,89 @@ body {
   color: var(--text-muted);
   padding: 0.5rem 0.7rem;
   cursor: pointer;
-  font-size: 0.85rem
+  font-size: 0.85rem;
+  border-bottom: 2px solid transparent;
+}
+.tab-btn.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
+}
+
+.tab-panel { display: none; flex-direction: column; gap: 0.6rem; }
+.tab-panel.active { display: flex; }
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.6rem;
+}
+.field input[type="text"],
+.field input[type="password"] {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.field input:focus { outline: none; border-color: var(--accent); }
+
+.checkbox-field {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+}
+.checkbox-field input { width: 16px; height: 16px; }
+
+.primary-btn {
+  background: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 10px;
+  padding: 0.6rem 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 0.3rem;
+}
+.primary-btn:hover { background: var(--accent-hover); }
+
+.hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 0.6rem;
+}
+.hint code {
+  background: var(--bg);
+  padding: 0.05rem 0.3rem;
+  border-radius: 4px;
+}
+
+/* Mobile */
+@media (max-width: 860px) {
+  .mobile-topbar { display: flex; }
+  .mobile-only { display: inline-flex; }
+
+  .shell { padding-top: 52px; }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    padding-top: 3.5rem;
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .main { width: 100%; }
+
+  .message { max-width: 90%; }
+
+  .top-bar { padding: 0.6rem 0.8rem; }
+  .chat-area { padding: 0.8rem; }
+}
