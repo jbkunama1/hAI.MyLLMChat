@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <title>hAI.MyLLMChat – Lightweight WebUI</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: #0f172a;
+      color: #e5e7eb;
+    }
+    a {
+      color: #38bdf8;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    .badge-row img {
+      margin-right: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      margin-top: 0;
+    }
+    @media (max-width: 640px) {
+      body {
+        padding: 1.5rem;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>hAI.MyLLMChat</h1>
+    <p>Schlanke, konfigurierbare WebUI für LLM-Chat, Bildgenerierung und MCP-Server – optimiert für Docker + Portainer.</p>
+
+    <div class="badge-row">
+      <img src="https://img.shields.io/github/repo-size/jbkunama1/hAI.MyLLMChat" alt="Repo size" />
+      <img src="https://img.shields.io/github/last-commit/jbkunama1/hAI.MyLLMChat" alt="Last commit" />
+      <img src="https://img.shields.io/github/license/jbkunama1/hAI.MyLLMChat" alt="License" />
+      <img src="https://img.shields.io/badge/docker-ready-blue" alt="Docker ready" />
+      <img src="https://img.shields.io/badge/docs-GitHub%20Pages-lightgrey" alt="GitHub Pages" />
+    </div>
+
+    <h2>Repository & Deployment</h2>
+    <p>
+      GitHub-Repo:
+      <a href="https://github.com/jbkunama1/hAI.MyLLMChat" target="_blank">
+        github.com/jbkunama1/hAI.MyLLMChat
+      </a>
+    </p>
+    <p>
+      Deployment: Als Portainer-Stack über die <code>docker-compose.yml</code>;
+      alle Backends (Chat, Image, MCP) werden ausschließlich über Environment-Variablen konfiguriert.
+    </p>
+
+    <h2>ENV-Variablen (Überblick)</h2>
+    <ul>
+      <li>Chat: <code>HAI_DEFAULT_CHAT_NAME</code>, <code>HAI_DEFAULT_CHAT_BASE_URL</code>, <code>HAI_DEFAULT_CHAT_API_KEY</code>, <code>HAI_DEFAULT_CHAT_MODEL</code></li>
+      <li>Image: <code>HAI_DEFAULT_IMAGE_NAME</code>, <code>HAI_DEFAULT_IMAGE_BASE_URL</code>, <code>HAI_DEFAULT_IMAGE_API_KEY</code>, <code>HAI_DEFAULT_IMAGE_ENDPOINT</code></li>
+      <li>MCP: <code>HAI_MCP_ENABLED</code>, <code>HAI_MCP_BASE_URL</code>, <code>HAI_MCP_TOKEN</code></li>
+    </ul>
+
+    <h2>Hinweis</h2>
+    <p>
+      Diese GitHub-Pages-Seite ist nur eine Projektbeschreibung. Die eigentliche WebUI läuft im Docker-Container
+      (FastAPI) und ist standardmäßig unter Port <code>8080</code> erreichbar.
+    </p>
+  </div>
+</body>
+</html>
