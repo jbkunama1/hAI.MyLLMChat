@@ -91,10 +91,8 @@ async def health():
 @app.get("/api/config")
 async def get_config():
     cfg = load_config()
-    # API-Keys / Tokens maskieren
     masked = cfg.copy()
 
-    # shallow copy reicht hier, wir maskieren im Dict in-place
     if masked.get("chat", {}).get("api_key"):
         masked["chat"]["api_key"] = "***"
     if masked.get("image", {}).get("api_key"):
@@ -113,8 +111,6 @@ async def update_config(new_cfg: Dict[str, Any] = Body(...), _admin=Depends(veri
     """
     cfg = load_config()
 
-    # Sehr einfache Merge-Strategie: top-level Keys (chat/image/mcp) werden überschrieben,
-    # inneres Dict wird gemischt.
     for section in ("chat", "image", "mcp"):
         if section in new_cfg and isinstance(new_cfg[section], dict):
             inner = cfg.get(section, {})
@@ -256,7 +252,6 @@ async def list_mcp_tools():
     mcp = get_mcp_config()
     if not mcp["enabled"] or not mcp["base_url"]:
         return {"enabled": False, "tools": []}
-    # später kannst du hier echte Tool-Discovery deines MCP-Gateways einbauen
     return {"enabled": True, "tools": []}
 
 
