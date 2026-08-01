@@ -48,4 +48,4 @@ networks:
     # Auf 'external: false' geändert, damit Docker das Netzwerk automatisch anlegt.
     # Falls du ein bestehendes externes Netzwerk nutzen willst, setze external: true
     # und lege es vorher an: docker network create highfishNetwork
-    external: false
+    external: true
