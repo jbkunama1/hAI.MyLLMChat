@@ -3,7 +3,7 @@ services:
     image: ghcr.io/jbkunama1/hai-myllmchat:latest
     container_name: hai-myllmchat
     ports:
-      - "8066:8066"
+      - "8066:8080"
     volumes:
       - hai-data:/data
     environment:
