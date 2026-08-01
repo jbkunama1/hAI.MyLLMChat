@@ -1,164 +1,96 @@
 # hAI.MyLLMChat
 
-<p align="center">
-  <img src="./logo_chat.png" alt="hAI.MyLLMChat Logo" width="400" />
-</p>
+Moderne Chat‑UI mit Unterstützung für:
+- Text‑Chat über beliebige OpenAI‑kompatible APIs
+- Bildgenerierung (z.B. über OpenRouter Images)
+- Optional MCP (Model Context Protocol) Integration
+- Lokale Konfiguration und Persistenz in `/data`
+- Dark/Light Mode + Themes
 
-<!-- badges: start -->
-![Repo size](https://img.shields.io/github/repo-size/jbkunama1/hAI.MyLLMChat)
-![Last commit](https://img.shields.io/github/last-commit/jbkunama1/hAI.MyLLMChat)
-![License](https://img.shields.io/github/license/jbkunama1/hAI.MyLLMChat)
-![Docker](https://img.shields.io/badge/docker-ready-blue)
-![GitHub Pages](https://img.shields.io/badge/docs-GitHub%20Pages-lightgrey)
-<!-- badges: end -->
+## Schnellstart (lokal)
 
-Schlanke, stylische Open-WebUI-Alternative auf Basis von FastAPI + SQLite (kein Postgres/Redis/Node nötig). Läuft als **ein einziger, schlanker Docker-Container** und wird komplett über Environment-Variablen konfiguriert.
-
-## Features
-
-- Chat mit beliebigen **OpenAI-kompatiblen Servern** (OpenRouter, LM Studio, Ollama `/v1`, vLLM, Groq, etc.) – angebunden über `/chat/completions`
-- **Bildgenerierung** über OpenAI-kompatible `/images/generations` Endpunkte
-- **MCP-Server-Anbindung** über das `mcpo` Proxy-Muster (MCP → OpenAPI) – Konfiguration via ENV
-- Chatverlauf (in einer späteren Ausbaustufe) in **SQLite**, persistiert über ein Docker-Volume
-- **Mobile-responsive**, dunkles, modernes UI ohne Build-Step (reines HTML/CSS/JS, kein Node/React nötig im Container)
-- ENV-basierte Konfiguration aller Backends (Chat, Image, MCP)
-
-## Architektur
-
-```text
- backend/main.py      FastAPI-App: API + Static-File-Server
- frontend/            Vanilla JS/HTML/CSS, wird direkt vom Backend ausgeliefert
- Dockerfile           python:3.12-slim, ein Layer, ein Prozess (uvicorn)
- docker-compose.yml   Fertiger Stack für Portainer (ENV-Platzhalter)
+```bash
+docker compose up -d
 ```
 
-Daten (SQLite-Datei) liegen in `/data` im Container, gemountet über das Volume `hai_data`.
+Dann öffnen: `http://localhost:8066`
 
-## Deployment über Portainer (Repository-Stack)
+Umgebungsvariablen (optional in `.env`):
 
-1. In Portainer: **Stacks → Add stack**
-2. Build method: **Repository**
-3. Repository URL: `https://github.com/jbkunama1/hAI.MyLLMChat`
-4. Repository reference: `refs/heads/main`
-5. Compose path: `docker-compose.yml` (Standard)
-6. Netzwerk sicherstellen (einmalig auf dem Host):
+```env
+HAI_ADMIN_USER=admin
+HAI_ADMIN_PASSWORD=changeme
+HAI_ADMIN_TOKEN=
+HAI_CHAT_API_KEY=
+HAI_IMAGE_API_KEY=
+HAI_MCP_API_KEY=
+```
 
-   ```bash
-   docker network create highfishNetwork
-   ```
+## Deployment mit GHCR + Portainer
 
-7. **Deploy the stack** klicken
+### Überblick
 
-Standardmäßig wird der Service im externen Netzwerk `highfishNetwork` gestartet und die FastAPI-App auf Port **8066 → 8080** gemappt:
+- GitHub Actions baut bei jedem Push auf `main` automatisch ein Docker‑Image und pusht es nach GHCR:
+  - `ghcr.io/jbkunama1/hai-myllmchat:latest`
+  - `ghcr.io/jbkunama1/hai-myllmchat:<commit-sha>`
+- Portainer pullt das Image und startet den Container.
 
-- Host-URL: `http://<host>:8066`
-- FastAPI lauscht im Container intern auf Port `8080`.
+### Workflows
 
-## docker-compose.yml (Ausschnitt)
+- **Auto‑Build** (`.github/workflows/auto-build-ghcr.yml`):
+  - Trigger: `push` auf `main`
+  - Baut und pusht automatisch nach GHCR.
+- **Manueller Build** (`.github/workflows/manual-build-ghcr.yml`):
+  - Trigger: `workflow_dispatch` (Button in GitHub Actions)
+  - Ermö¿¿¹glicht manuelles Auslö¿¿¹sen des Builds mit Parametern.
 
+### Portainer (Stack via Git)
+
+1. In Portainer einen neuen **Stack** anlegen.
+2. **Repository** wählen:
+   - Repository URL: `https://github.com/jbkunama1/hAI.MyLLMChat`
+   - Reference: `refs/heads/main`
+   - Compose path: `docker-compose.yml`
+3. Umgebungsvariablen setzen (z.B. im Stack oder via `.env`):
+   - `HAI_ADMIN_USER`, `HAI_ADMIN_PASSWORD`, etc.
+4. Stack deployen.
+
+Bei jedem Push auf `main`:
+- GitHub Actions baut neues Image und pusht nach GHCR.
+- In Portainer den Stack öffnen → **Pull and redeploy** / **Recreate**.
+- Portainer zieht das neue `ghcr.io/jbkunama1/hai-myllmchat:latest` und startet neu.
+
+### Portainer (lokal mit docker compose)
+
+Falls du den Stack nicht über Git, sondern lokal verwaltest:
+
+```bash
+# Image pullen
+docker compose pull
+
+# Container neu starten
+docker compose up -d
+```
+
+Das `docker-compose.yml` ist bereits auf GHCR ausgelegt:
 ```yaml
 services:
   hai-myllmchat:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: hai-myllmchat
-    restart: unless-stopped
-    ports:
-      - "8066:8080"
-    volumes:
-      - hai_data:/data
-    environment:
-      - DATA_DIR=/data
-      - TZ=Europe/Berlin
-
-      # Default Chat Backend (z.B. OpenRouter, OpenAI, Ollama)
-      - HAI_DEFAULT_CHAT_NAME=${HAI_DEFAULT_CHAT_NAME}
-      - HAI_DEFAULT_CHAT_BASE_URL=${HAI_DEFAULT_CHAT_BASE_URL}
-      - HAI_DEFAULT_CHAT_API_KEY=${HAI_DEFAULT_CHAT_API_KEY}
-      - HAI_DEFAULT_CHAT_MODEL=${HAI_DEFAULT_CHAT_MODEL}
-
-      # Default Image Backend
-      - HAI_DEFAULT_IMAGE_NAME=${HAI_DEFAULT_IMAGE_NAME}
-      - HAI_DEFAULT_IMAGE_BASE_URL=${HAI_DEFAULT_IMAGE_BASE_URL}
-      - HAI_DEFAULT_IMAGE_API_KEY=${HAI_DEFAULT_IMAGE_API_KEY}
-      - HAI_DEFAULT_IMAGE_ENDPOINT=${HAI_DEFAULT_IMAGE_ENDPOINT}
-
-      # MCP Gateway
-      - HAI_MCP_ENABLED=${HAI_MCP_ENABLED}
-      - HAI_MCP_BASE_URL=${HAI_MCP_BASE_URL}
-      - HAI_MCP_TOKEN=${HAI_MCP_TOKEN}
-
-    networks:
-      - highfishNetwork
-
-volumes:
-  hai_data:
-    driver: local
-
-networks:
-  highfishNetwork:
-    external: true
+    image: ghcr.io/jbkunama1/hai-myllmchat:latest
+    # ...
 ```
 
-## ENV-Konfiguration
+## Konfiguration im Container
 
-Dieses Projekt ist komplett über Environment-Variablen konfigurierbar:
+- Konfigurationsdatei: `/data/config.json`
+- Wird über die Settings‑UI im Browser verwaltet.
+- Daten (Chats, Uploads etc.) landen ebenfalls unter `/data`.
 
-- Chat:
-  - `HAI_DEFAULT_CHAT_NAME`
-  - `HAI_DEFAULT_CHAT_BASE_URL`
-  - `HAI_DEFAULT_CHAT_API_KEY`
-  - `HAI_DEFAULT_CHAT_MODEL`
-- Image:
-  - `HAI_DEFAULT_IMAGE_NAME`
-  - `HAI_DEFAULT_IMAGE_BASE_URL`
-  - `HAI_DEFAULT_IMAGE_API_KEY`
-  - `HAI_DEFAULT_IMAGE_ENDPOINT`
-- MCP:
-  - `HAI_MCP_ENABLED`
-  - `HAI_MCP_BASE_URL`
-  - `HAI_MCP_TOKEN`
+## Sicherheitshinweis
 
-Die Variablen werden im Container über `docker-compose.yml` nur als Platzhalter (`${...}`) gesetzt und können in Portainer oder einer `.env`-Datei für jede Umgebung frei belegt werden.
-
-### Beispiel: OpenRouter als Backend
-
-```env
-HAI_DEFAULT_CHAT_NAME=OpenRouter
-HAI_DEFAULT_CHAT_BASE_URL=https://openrouter.ai/api/v1
-HAI_DEFAULT_CHAT_API_KEY=sk-or-...
-HAI_DEFAULT_CHAT_MODEL=gpt-4o-mini
-
-HAI_DEFAULT_IMAGE_NAME=OpenRouter-Images
-HAI_DEFAULT_IMAGE_BASE_URL=https://openrouter.ai/api/v1
-HAI_DEFAULT_IMAGE_API_KEY=sk-or-...
-HAI_DEFAULT_IMAGE_ENDPOINT=/images/generations
-
-HAI_MCP_ENABLED=false
-HAI_MCP_BASE_URL=
-HAI_MCP_TOKEN=
-```
-
-## API-Endpunkte (Backend)
-
-- `GET /api/health` – Healthcheck (für Docker HEALTHCHECK)
-- `GET /api/config` – gibt die aktuell konfigurierten Backends (Chat, Image, MCP) aus den ENV-Variablen zurück
-- `POST /api/chat` – Chat-Endpoint, ruft ein OpenAI-kompatibles Backend (`/chat/completions`) auf
-- `POST /api/image` – Bildgenerierung, ruft `/images/generations` auf
-- `GET /api/mcp/tools` – MCP-Stub (kann später an ein MCP-Gateway angebunden werden)
-
-Das Frontend (`frontend/index.html`, `style.css`, `app.js`) wird direkt über FastAPI als Static Files auf `/` ausgeliefert.
-
-## Lokal ohne Docker testen
-
-```bash
-pip install -r requirements.txt
-DATA_DIR=./data uvicorn backend.main:app --reload --port 8080
-```
-
-UI: `http://localhost:8080`
+- Standard‑Passwort (`changeme`) unbedingt ändern.
+- Vor einem öffentlichen Zugriff HTTPS und Authentifizierung vorsehen (z.B. Reverse Proxy + Auth).
 
 ## Lizenz
 
-MIT – frei nutzbar und anpassbar.
+Siehe `LICENSE` im Repository.
