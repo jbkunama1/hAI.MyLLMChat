@@ -30,7 +30,7 @@ services:
     restart: unless-stopped
     healthcheck:
       # Intern läuft der Server auf Port 8080 (nicht 8066)
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && exit 0 || exit 1"]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/api/health')\" || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
