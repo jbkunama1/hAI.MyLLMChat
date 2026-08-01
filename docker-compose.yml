@@ -6,22 +6,17 @@ services:
     container_name: hai-myllmchat
     restart: unless-stopped
 
-    # Port-Mapping: außen 8066, innen 8080 (FastAPI)
     ports:
       - "8066:8080"
 
-    # Persistente Daten: SQLite + config.json unter /data
     volumes:
       - hai_data:/data
 
     environment:
-      # Basis
       - DATA_DIR=/data
       - TZ=Europe/Berlin
 
       # Admin-Zugang WebUI
-      # Login über User/Pass: base64("user:pass") im Header X-Admin-Auth
-      # oder direkt HAI_ADMIN_TOKEN als fester Token verwenden
       - HAI_ADMIN_USER=${HAI_ADMIN_USER}
       - HAI_ADMIN_PASSWORD=${HAI_ADMIN_PASSWORD}
       - HAI_ADMIN_TOKEN=${HAI_ADMIN_TOKEN}
