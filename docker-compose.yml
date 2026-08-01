@@ -31,3 +31,4 @@ volumes:
 networks:
   highfishNetwork:
     name: highfishNetwork
+    external: true
