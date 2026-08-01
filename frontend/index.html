@@ -8,6 +8,7 @@
 </head>
 <body>
   <div class="shell">
+    <!-- Mobile Topbar -->
     <div class="mobile-topbar">
       <button id="menuToggle" class="icon-button" title="Menü">☰</button>
       <span class="mobile-title">hAI.MyLLMChat</span>
@@ -16,6 +17,7 @@
 
     <div class="overlay hidden" id="sidebarOverlay"></div>
 
+    <!-- Sidebar -->
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-header">
         <div class="brand">
@@ -45,6 +47,7 @@
       </div>
     </aside>
 
+    <!-- Main -->
     <main class="main">
       <header class="top-bar">
         <div class="model-select-wrap">
@@ -86,6 +89,7 @@
     </main>
   </div>
 
+  <!-- Login-Modal -->
   <div id="loginModal" class="modal hidden">
     <div class="modal-content">
       <header class="modal-header">
@@ -110,6 +114,7 @@
     </div>
   </div>
 
+  <!-- Settings-Modal mit Tabs -->
   <div id="settingsModal" class="modal hidden">
     <div class="modal-content large">
       <header class="modal-header">
@@ -178,7 +183,10 @@
         </div>
 
         <button id="saveConfig" class="primary-btn">Speichern</button>
-        <p class="hint">Backend-Konfiguration wird persistiert in <code>/data/config.json</code>. Design wird lokal im Browser gespeichert.</p>
+        <p class="hint">
+          Backend-Konfiguration wird persistiert in <code>/data/config.json</code>.
+          Design (Theme + Light/Dark) wird lokal im Browser gespeichert.
+        </p>
       </div>
     </div>
   </div>
