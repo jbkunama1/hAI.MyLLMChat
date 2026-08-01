@@ -1,50 +1,27 @@
 services:
   hai-myllmchat:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ghcr.io/jbkunama1/hai-myllmchat:latest
     container_name: hai-myllmchat
-    restart: unless-stopped
-
     ports:
-      - "8066:8080"
-
+      - "8066:8066"
     volumes:
-      - hai_data:/data
-
+      - hai-data:/data
     environment:
-      - DATA_DIR=/data
+      - HAI_ADMIN_USER=${HAI_ADMIN_USER:-admin}
+      - HAI_ADMIN_PASSWORD=${HAI_ADMIN_PASSWORD:-changeme}
+      - HAI_ADMIN_TOKEN=${HAI_ADMIN_TOKEN:-}
+      - HAI_CHAT_API_KEY=${HAI_CHAT_API_KEY:-}
+      - HAI_IMAGE_API_KEY=${HAI_IMAGE_API_KEY:-}
+      - HAI_MCP_API_KEY=${HAI_MCP_API_KEY:-}
       - TZ=Europe/Berlin
-
-      # Admin-Zugang WebUI
-      - HAI_ADMIN_USER=${HAI_ADMIN_USER}
-      - HAI_ADMIN_PASSWORD=${HAI_ADMIN_PASSWORD}
-      - HAI_ADMIN_TOKEN=${HAI_ADMIN_TOKEN}
-
-      # Default Chat Backend (z.B. OpenRouter, OpenAI, Ollama)
-      - HAI_DEFAULT_CHAT_NAME=${HAI_DEFAULT_CHAT_NAME}
-      - HAI_DEFAULT_CHAT_BASE_URL=${HAI_DEFAULT_CHAT_BASE_URL}
-      - HAI_DEFAULT_CHAT_API_KEY=${HAI_DEFAULT_CHAT_API_KEY}
-      - HAI_DEFAULT_CHAT_MODEL=${HAI_DEFAULT_CHAT_MODEL}
-
-      # Default Image Backend
-      - HAI_DEFAULT_IMAGE_NAME=${HAI_DEFAULT_IMAGE_NAME}
-      - HAI_DEFAULT_IMAGE_BASE_URL=${HAI_DEFAULT_IMAGE_BASE_URL}
-      - HAI_DEFAULT_IMAGE_API_KEY=${HAI_DEFAULT_IMAGE_API_KEY}
-      - HAI_DEFAULT_IMAGE_ENDPOINT=${HAI_DEFAULT_IMAGE_ENDPOINT}
-
-      # MCP Gateway
-      - HAI_MCP_ENABLED=${HAI_MCP_ENABLED}
-      - HAI_MCP_BASE_URL=${HAI_MCP_BASE_URL}
-      - HAI_MCP_TOKEN=${HAI_MCP_TOKEN}
-
-    networks:
-      - highfishNetwork
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8066/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
-  hai_data:
-    driver: local
-
-networks:
-  highfishNetwork:
-    external: true
+  hai-data:
+    name: hai-data
