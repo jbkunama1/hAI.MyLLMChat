@@ -266,7 +266,25 @@ async def generate_image(req: ImageRequest):
 
     urls: List[ImageUrl] = []
     try:
-      for item in data.get("data", []):
-          if "url" in item:
-              urls.append(ImageUrl(url=item["url"]))
-    except
+        for item in data.get("data", []):
+            if "url" in item:
+                urls.append(ImageUrl(url=item["url"]))
+    except Exception:
+        raise HTTPException(status_code=500, detail="Unerwartetes Antwortformat vom Image-Backend.")
+
+    return ImageResponse(images=urls)
+
+
+# ---------- MCP-Proxy-Gerüst ----------
+
+@app.get("/api/mcp/tools")
+async def list_mcp_tools():
+    mcp = get_mcp_config()
+    if not mcp["enabled"] or not mcp["base_url"]:
+        return {"enabled": False, "tools": []}
+    return {"enabled": True, "tools": []}
+
+
+# ---------- Static files (Frontend) ----------
+
+app.mount("/", StaticFiles(directory="frontend", html=True), name="static")
