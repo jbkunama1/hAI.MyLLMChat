@@ -293,6 +293,7 @@ document.addEventListener("DOMContentLoaded", async () => {
           appendImageMessage(urls);
         } else {
           appendMessage("assistant", "Keine Bilder erhalten (Image-Backend prüfen).");
+          }
                 } else {
         const messages = [];
         for (const m of history) messages.push(m);
