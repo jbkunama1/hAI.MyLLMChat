@@ -16,12 +16,14 @@ services:
       - TZ=Europe/Berlin
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8066/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8066/"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    networks:
+      - highfishNetwork
 
-volumes:
-  hai-data:
-    name: hai-data
+networks:
+  highfishNetwork:
+    name: highfishNetwork
