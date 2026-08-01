@@ -510,8 +510,11 @@ body {
     transform: translateX(-100%);
     transition: transform 0.2s ease;
     padding-top: 3.5rem;
+    z-index: 40; /* unter Modal (50), über Content */
   }
   .sidebar.open { transform: translateX(0); }
+
+  .sidebar-overlay { z-index: 39; }
 
   .mobile-only { display: inline-flex; }
 
@@ -521,4 +524,30 @@ body {
 
   .top-bar { padding: 0.6rem 0.8rem; }
   .chat-area { padding: 0.8rem; }
+
+  /* Settings-Modal scrollbar + nicht bis an den Rand */
+  .modal-content,
+  .modal-content.large {
+    max-width: calc(100vw - 24px);
+    max-height: 85vh;
+    overflow-y: auto;
+    margin: 0 12px;
+    padding: 1rem;
+  }
+
+  /* Eingabeleiste fixieren, iPhone Safe-Area berücksichtigen */
+  .composer {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg);
+    padding-bottom: calc(0.6rem + env(safe-area-inset-bottom));
+    z-index: 10;
+  }
+
+  /* Kompaktere Abstände im Composer */
+  .composer-inner { padding: 0.5rem; gap: 0.4rem; }
+
+  /* Tabs im Settings-Modal umbrechen lassen */
+  .tab-buttons { flex-wrap: wrap; gap: 0.3rem; }
+  .tab-buttons button { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
 }
