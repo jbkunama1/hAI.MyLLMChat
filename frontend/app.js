@@ -41,11 +41,54 @@ function applyMode(mode) {
   if (cb) cb.checked = mode === "light";
 }
 
+function applyBackground(bg) {
+  const valid = ["gradient", "dots", "grid", "plain"];
+  if (!valid.includes(bg)) bg = "gradient";
+  if (bg === "gradient") {
+    document.documentElement.removeAttribute("data-bg");
+  } else {
+    document.documentElement.setAttribute("data-bg", bg);
+  }
+  localStorage.setItem("hai_bg", bg);
+  document.querySelectorAll(".bg-swatch").forEach((b) =>
+    b.classList.toggle("active", b.dataset.bg === bg)
+  );
+}
+
+function applyFontSize(size) {
+  const valid = ["small", "medium", "large"];
+  if (!valid.includes(size)) size = "medium";
+  if (size === "medium") {
+    document.documentElement.removeAttribute("data-fontsize");
+  } else {
+    document.documentElement.setAttribute("data-fontsize", size);
+  }
+  localStorage.setItem("hai_fontsize", size);
+  document.querySelectorAll(".font-size-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.fontsize === size)
+  );
+}
+
+function applyFontFamily(family) {
+  const valid = ["system", "mono", "serif"];
+  if (!valid.includes(family)) family = "system";
+  if (family === "system") {
+    document.documentElement.removeAttribute("data-fontfamily");
+  } else {
+    document.documentElement.setAttribute("data-fontfamily", family);
+  }
+  localStorage.setItem("hai_fontfamily", family);
+  document.querySelectorAll(".font-family-btn").forEach((b) =>
+    b.classList.toggle("active", b.dataset.fontfamily === family)
+  );
+}
+
 function loadThemeAndMode() {
-  const savedTheme = localStorage.getItem("hai_theme") || "indigo";
-  const savedMode = localStorage.getItem("hai_mode") || "dark";
-  applyTheme(savedTheme);
-  applyMode(savedMode);
+  applyTheme(localStorage.getItem("hai_theme") || "indigo");
+  applyMode(localStorage.getItem("hai_mode") || "dark");
+  applyBackground(localStorage.getItem("hai_bg") || "gradient");
+  applyFontSize(localStorage.getItem("hai_fontsize") || "medium");
+  applyFontFamily(localStorage.getItem("hai_fontfamily") || "system");
 }
 
 async function fetchConfig() {
@@ -177,6 +220,7 @@ function buildUserMessageText(rawText) {
     .join("\n\n");
   return `${fileNotes}\n\n${rawText}`.trim();
 }
+
 document.addEventListener("DOMContentLoaded", async () => {
   loadAdminToken();
   loadThemeAndMode();
@@ -293,8 +337,8 @@ document.addEventListener("DOMContentLoaded", async () => {
           appendImageMessage(urls);
         } else {
           appendMessage("assistant", "Keine Bilder erhalten (Image-Backend prüfen).");
-          }
-                } else {
+        }
+      } else {
         const messages = [];
         for (const m of history) messages.push(m);
         messages.push({ role: "user", content: finalText });
@@ -356,6 +400,21 @@ document.addEventListener("DOMContentLoaded", async () => {
   // Theme-Swatches klicken
   document.querySelectorAll(".theme-swatch").forEach((sw) => {
     sw.addEventListener("click", () => applyTheme(sw.dataset.theme));
+  });
+
+  // Hintergrund-Optionen
+  document.querySelectorAll(".bg-swatch").forEach((b) => {
+    b.addEventListener("click", () => applyBackground(b.dataset.bg));
+  });
+
+  // Schriftgrößen
+  document.querySelectorAll(".font-size-btn").forEach((b) => {
+    b.addEventListener("click", () => applyFontSize(b.dataset.fontsize));
+  });
+
+  // Schriftarten
+  document.querySelectorAll(".font-family-btn").forEach((b) => {
+    b.addEventListener("click", () => applyFontFamily(b.dataset.fontfamily));
   });
 
   // Light Mode Checkbox
