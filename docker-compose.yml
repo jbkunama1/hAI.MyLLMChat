@@ -24,6 +24,10 @@ services:
     networks:
       - highfishNetwork
 
+volumes:
+  hai-data:
+    name: hai-data
+
 networks:
   highfishNetwork:
     name: highfishNetwork
