@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <title>hAI.MyLLMChat</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=IBM+Plex+Serif:wght@400;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
@@ -172,7 +175,8 @@
             <input id="cfgLightMode" type="checkbox" />
             <span>Light Mode</span>
           </label>
-          <p class="hint" style="margin-top:0;">Farbschema wählen:</p>
+
+          <p class="hint" style="margin-top:0.8rem;">Farbschema:</p>
           <div class="theme-grid">
             <div class="theme-swatch" data-theme="indigo" title="Indigo"></div>
             <div class="theme-swatch" data-theme="orange" title="Orange"></div>
@@ -180,12 +184,34 @@
             <div class="theme-swatch" data-theme="rose" title="Rose"></div>
             <div class="theme-swatch" data-theme="slate" title="Slate"></div>
           </div>
+
+          <p class="hint" style="margin-top:0.8rem;">Hintergrund:</p>
+          <div class="bg-options">
+            <button type="button" class="bg-swatch active" data-bg="gradient">Verlauf</button>
+            <button type="button" class="bg-swatch" data-bg="dots">Punkte</button>
+            <button type="button" class="bg-swatch" data-bg="grid">Grid</button>
+            <button type="button" class="bg-swatch" data-bg="plain">Neutral</button>
+          </div>
+
+          <p class="hint" style="margin-top:0.8rem;">Schriftgröße:</p>
+          <div class="font-size-options">
+            <button type="button" class="font-size-btn" data-fontsize="small">A− Kompakt</button>
+            <button type="button" class="font-size-btn active" data-fontsize="medium">A Standard</button>
+            <button type="button" class="font-size-btn" data-fontsize="large">A+ Groß</button>
+          </div>
+
+          <p class="hint" style="margin-top:0.8rem;">Schriftart:</p>
+          <div class="font-family-options">
+            <button type="button" class="font-family-btn active" data-fontfamily="system">System</button>
+            <button type="button" class="font-family-btn mono" data-fontfamily="mono">JetBrains Mono</button>
+            <button type="button" class="font-family-btn serif" data-fontfamily="serif">Plex Serif</button>
+          </div>
         </div>
 
         <button id="saveConfig" class="primary-btn">Speichern</button>
         <p class="hint">
           Backend-Konfiguration wird persistiert in <code>/data/config.json</code>.
-          Design (Theme + Light/Dark) wird lokal im Browser gespeichert.
+          Design (Theme, Hintergrund, Schrift) wird lokal im Browser gespeichert.
         </p>
       </div>
     </div>
