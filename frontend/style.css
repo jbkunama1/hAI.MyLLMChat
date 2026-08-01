@@ -11,6 +11,20 @@
   --success: #34d399;
   --radius: 14px;
   --sidebar-width: 280px;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-size: 16px;
+}
+
+/* Schriftgrößen */
+:root[data-fontsize="small"] { font-size: 14px; }
+:root[data-fontsize="large"] { font-size: 18px; }
+
+/* Schriftarten */
+:root[data-fontfamily="mono"] {
+  --font-body: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+:root[data-fontfamily="serif"] {
+  --font-body: "IBM Plex Serif", Georgia, "Times New Roman", serif;
 }
 
 /* Light Mode */
@@ -48,13 +62,32 @@
 html, body { margin: 0; padding: 0; height: 100%; }
 
 body {
-  font-family: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-body);
+  font-size: 1rem;
   background:
     radial-gradient(1200px 600px at 10% -10%, rgba(99,102,241,0.12), transparent),
     radial-gradient(900px 500px at 100% 0%, rgba(56,189,248,0.08), transparent),
     var(--bg);
   color: var(--text);
   transition: background 0.2s ease, color 0.2s ease;
+}
+
+/* Hintergrund-Varianten */
+[data-bg="plain"] body {
+  background: var(--bg);
+}
+[data-bg="dots"] body {
+  background:
+    radial-gradient(circle, var(--border) 1px, transparent 1px),
+    var(--bg);
+  background-size: 22px 22px, auto;
+}
+[data-bg="grid"] body {
+  background:
+    linear-gradient(var(--border) 1px, transparent 1px),
+    linear-gradient(90deg, var(--border) 1px, transparent 1px),
+    var(--bg);
+  background-size: 32px 32px, 32px 32px, auto;
 }
 
 .shell { display: flex; height: 100vh; overflow: hidden; }
@@ -268,6 +301,7 @@ body {
   font-size: 0.78rem;
   border: 1px dashed var(--border);
 }
+
 /* Composer */
 .composer {
   border-top: 1px solid var(--border);
@@ -290,6 +324,7 @@ body {
   border: none;
   background: transparent;
   color: var(--text);
+  font-family: inherit;
   font-size: 0.92rem;
   max-height: 140px;
   padding: 0.4rem 0.2rem;
@@ -385,6 +420,7 @@ body {
   gap: 0.4rem;
   margin: 0.75rem 0;
   border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
 }
 .tab-btn {
   background: none;
@@ -423,6 +459,7 @@ body {
   border-radius: 8px;
   padding: 0.5rem 0.6rem;
   color: var(--text);
+  font-family: inherit;
   font-size: 0.85rem;
 }
 .field input:focus {
@@ -499,6 +536,35 @@ body {
 .theme-swatch[data-theme="slate"] {
   background: linear-gradient(135deg, #64748b, #cbd5e1);
 }
+
+/* Hintergrund-/Schrift-Optionsbuttons */
+.bg-options, .font-size-options, .font-family-options {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin: 0.3rem 0 0.8rem;
+}
+.bg-swatch, .font-size-btn, .font-family-btn {
+  padding: 0.4rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  font-size: 0.82rem;
+  font-family: inherit;
+}
+.bg-swatch:hover, .font-size-btn:hover, .font-family-btn:hover {
+  border-color: var(--accent);
+}
+.bg-swatch.active, .font-size-btn.active, .font-family-btn.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+  background: var(--accent-soft);
+}
+.font-family-btn.mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+.font-family-btn.serif { font-family: "IBM Plex Serif", Georgia, serif; }
+
 /* Responsive */
 @media (max-width: 860px) {
   .mobile-topbar { display: flex; }
@@ -510,11 +576,9 @@ body {
     transform: translateX(-100%);
     transition: transform 0.2s ease;
     padding-top: 3.5rem;
-    z-index: 40; /* unter Modal (50), über Content */
+    z-index: 40;
   }
   .sidebar.open { transform: translateX(0); }
-
-  .sidebar-overlay { z-index: 39; }
 
   .mobile-only { display: inline-flex; }
 
@@ -535,7 +599,7 @@ body {
     padding: 1rem;
   }
 
-  /* Eingabeleiste fixieren, iPhone Safe-Area berücksichtigen */
+  /* Eingabeleiste fixieren, iPhone Safe-Area */
   .composer {
     position: sticky;
     bottom: 0;
@@ -544,10 +608,15 @@ body {
     z-index: 10;
   }
 
-  /* Kompaktere Abstände im Composer */
   .composer-inner { padding: 0.5rem; gap: 0.4rem; }
 
-  /* Tabs im Settings-Modal umbrechen lassen */
-  .tab-buttons { flex-wrap: wrap; gap: 0.3rem; }
-  .tab-buttons button { padding: 0.35rem 0.6rem; font-size: 0.85rem; }
+  /* Options-Buttons auf voller Breite */
+  .bg-options, .font-size-options, .font-family-options {
+    width: 100%;
+  }
+  .bg-swatch, .font-size-btn, .font-family-btn {
+    flex: 1;
+    text-align: center;
+    min-width: 70px;
+  }
 }
