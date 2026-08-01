@@ -10,13 +10,27 @@ services:
       - HAI_ADMIN_USER=${HAI_ADMIN_USER:-admin}
       - HAI_ADMIN_PASSWORD=${HAI_ADMIN_PASSWORD:-changeme}
       - HAI_ADMIN_TOKEN=${HAI_ADMIN_TOKEN:-}
+      # Chat API (wird intern als HAI_DEFAULT_CHAT_API_KEY gelesen)
       - HAI_CHAT_API_KEY=${HAI_CHAT_API_KEY:-}
+      - HAI_DEFAULT_CHAT_API_KEY=${HAI_CHAT_API_KEY:-}
+      - HAI_DEFAULT_CHAT_BASE_URL=${HAI_DEFAULT_CHAT_BASE_URL:-https://openrouter.ai/api/v1}
+      - HAI_DEFAULT_CHAT_MODEL=${HAI_DEFAULT_CHAT_MODEL:-openai/gpt-4o-mini}
+      - HAI_DEFAULT_CHAT_NAME=${HAI_DEFAULT_CHAT_NAME:-OpenRouter}
+      # Image API
       - HAI_IMAGE_API_KEY=${HAI_IMAGE_API_KEY:-}
+      - HAI_DEFAULT_IMAGE_API_KEY=${HAI_IMAGE_API_KEY:-}
+      - HAI_DEFAULT_IMAGE_BASE_URL=${HAI_DEFAULT_IMAGE_BASE_URL:-}
+      - HAI_DEFAULT_IMAGE_NAME=${HAI_DEFAULT_IMAGE_NAME:-}
+      # MCP
       - HAI_MCP_API_KEY=${HAI_MCP_API_KEY:-}
+      - HAI_MCP_ENABLED=${HAI_MCP_ENABLED:-false}
+      - HAI_MCP_BASE_URL=${HAI_MCP_BASE_URL:-}
+      - HAI_MCP_TOKEN=${HAI_MCP_TOKEN:-}
       - TZ=Europe/Berlin
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8066 && exit 0 || exit 1"]
+      # Intern läuft der Server auf Port 8080 (nicht 8066)
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/localhost/8080 && exit 0 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -31,4 +45,7 @@ volumes:
 networks:
   highfishNetwork:
     name: highfishNetwork
-    external: true
+    # Auf 'external: false' geändert, damit Docker das Netzwerk automatisch anlegt.
+    # Falls du ein bestehendes externes Netzwerk nutzen willst, setze external: true
+    # und lege es vorher an: docker network create highfishNetwork
+    external: false
