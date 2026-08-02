@@ -115,6 +115,18 @@ async function fetchModels() {
   }
 }
 
+async function fetchProviders() {
+  try {
+    const res = await fetch("/api/providers");
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data.providers || [];
+  } catch (e) {
+    console.error("Providers error:", e);
+    return [];
+  }
+}
+
 async function fetchChats() {
   try {
     const res = await fetch("/api/chats");
@@ -323,6 +335,84 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
+// --- Provider-Verwaltung im Settings-Modal ---
+// Vergleicht zwei Listen: macht items mit gleicher id löschbar.
+let providerDrafts = [];
+
+function renderProviderList(list) {
+  providerDrafts = list.map((p) => {
+    if (p != null && typeof p === "object") return { ...p };
+    return {};
+  });
+  if (!el("providerList")) return;
+  const container = el("providerList");
+  container.innerHTML = "";
+  if (!providerDrafts.length) {
+    container.innerHTML = `<div class="provider-list-empty">Keine Anbieter konfiguriert.</div>`;
+  }
+  providerDrafts.forEach((p, i) => renderProviderCard(p, i));
+}
+
+function renderProviderCard(p, i) {
+  const container = el("providerList");
+  const card = document.createElement("div");
+  card.className = "provider-card";
+  card.dataset.index = i;
+  card.innerHTML = `
+    <div class="provider-row">
+      <label style="flex:1;min-width:0;">Name
+        <input id="pvName${i}" type="text" value="${escapeHtml(p.name || "")}" placeholder="z.B. OpenRouter" />
+      </label>
+    </div>
+    <div class="provider-row">
+      <label style="flex:1;min-width:0;">Base URL
+        <input id="pvUrl${i}" type="text" value="${escapeHtml(p.base_url || "")}" placeholder="https://.../v1" />
+      </label>
+    </div>
+    <div class="provider-row">
+      <label style="flex:1;min-width:0;">API-Key
+        <input id="pvKey${i}" type="password" value="${escapeHtml(p.api_key && p.api_key !== "***" ? p.api_key : "")}" placeholder="sk-…" />
+      </label>
+    </div>
+    <div class="provider-row">
+      <label style="flex:1;min-width:0;">Modelle (kommagetrennt)
+        <input id="pvModels${i}" type="text" value="${escapeHtml((p.models || []).join(", "))}" placeholder="gpt-4o, claude-3, llama" />
+      </label>
+    </div>
+    <div class="provider-row">
+      <label class="checkbox-field">
+        <input id="pvSelected${i}" type="checkbox" ${p.selected ? "checked" : ""} />
+        <span>Standard-Anbieter</span>
+      </label>
+    </div>
+    <div class="provider-actions">
+      <button class="ghost-btn" style="margin-top:0;" data-action="remove">Entfernen</button>
+    </div>
+  `;
+  container.appendChild(card);
+
+  card.querySelectorAll("[data-action=remove]").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      providerDrafts.splice(i, 1);
+      renderProviderList(providerDrafts);
+    })
+  );
+}
+
+function collectProviderDrafts() {
+  return providerDrafts.map((p, i) => ({
+    id: p.id, // id wird beim Speichern beibehalten oder neu generiert
+    name: (el(`pvName${i}`)?.value || "").trim(),
+    base_url: (el(`pvUrl${i}`)?.value || "").trim(),
+    api_key: (el(`pvKey${i}`)?.value || "").trim(),
+    models: (el(`pvModels${i}`)?.value || "")
+      .split(",")
+      .map((m) => m.trim())
+      .filter(Boolean),
+    selected: el(`pvSelected${i}`)?.checked || false,
+  }));
+}
+
 // Sidebar-Events
 const setupSidebar = () => {
   const sidebar = el("sidebar");
@@ -393,40 +483,84 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Config laden
   config = await fetchConfig();
-  if (config) {
+  if (!adminToken) {
+    // Ohne Login keine Verbindungs-/Provider-Infos anzeigen
+    setStatus("idle", "Nicht eingeloggt");
+    el("mcpPill").textContent = "MCP: –";
+    el("mcpPill").style.display = "none";
+  } else if (config) {
     setStatus(
       "online",
       config.chat?.name ? `Verbunden: ${config.chat.name}` : "Kein Chat-Backend konfiguriert"
     );
     el("mcpPill").textContent = "MCP: " + (config.mcp?.enabled ? "aktiv" : "inaktiv");
+    el("mcpPill").style.display = "";
   } else {
     setStatus("error", "Backend nicht erreichbar");
+    el("mcpPill").textContent = "MCP: –";
+    el("mcpPill").style.display = "none";
   }
 
-  // Modelle laden
-  const models = await fetchModels();
+  // Provider + Modelle laden
+  const providerSelect = el("providerSelect");
   const select = el("modelSelect");
-  select.innerHTML = "";
-  if (models.length) {
-    models.forEach((m) => {
+
+  async function populateModelSelect() {
+    select.innerHTML = "";
+    const models = await fetchModels();
+    if (models.length) {
+      models.forEach((m) => {
+        const opt = document.createElement("option");
+        opt.value = m;
+        opt.textContent = m;
+        select.appendChild(opt);
+      });
+      if (config?.chat?.model && models.includes(config.chat.model)) {
+        select.value = config.chat.model;
+      }
+    } else if (config?.chat?.model) {
       const opt = document.createElement("option");
-      opt.value = m;
-      opt.textContent = m;
+      opt.value = config.chat.model;
+      opt.textContent = config.chat.model;
       select.appendChild(opt);
-    });
-    if (config?.chat?.model && models.includes(config.chat.model)) {
-      select.value = config.chat.model;
+    } else {
+      const opt = document.createElement("option");
+      opt.value = "";
+      opt.textContent = "Kein Modell konfiguriert";
+      select.appendChild(opt);
     }
-  } else if (config?.chat?.model) {
-    const opt = document.createElement("option");
-    opt.value = config.chat.model;
-    opt.textContent = config.chat.model;
-    select.appendChild(opt);
+  }
+
+  const providers = await fetchProviders();
+  if (providers.length) {
+    providerSelect.innerHTML = "";
+    providers.forEach((p) => {
+      const opt = document.createElement("option");
+      opt.value = p.id || p.name || "";
+      opt.textContent = p.name || p.id;
+      providerSelect.appendChild(opt);
+      if (p.selected) providerSelect.value = opt.value;
+    });
+    providerSelect.addEventListener("change", async () => {
+      try {
+        await fetch("/api/providers/select", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ provider_id: providerSelect.value }),
+        });
+      } catch (e) {
+        console.error("Provider select error:", e);
+      }
+      await populateModelSelect();
+    });
+    await populateModelSelect();
   } else {
+    providerSelect.innerHTML = "";
     const opt = document.createElement("option");
     opt.value = "";
-    opt.textContent = "Kein Modell konfiguriert";
-    select.appendChild(opt);
+    opt.textContent = "Kein Anbieter konfiguriert";
+    providerSelect.appendChild(opt);
+    await populateModelSelect();
   }
 
   // Textarea + Enter-to-send
@@ -515,18 +649,49 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   // Login-Modal
   const loginModal = el("loginModal");
-  el("loginButton").addEventListener("click", () => loginModal.classList.remove("hidden"));
+  const loginButton = el("loginButton");
+  const updateLoginUI = () => {
+    if (adminToken) {
+      loginButton.textContent = "👤 Eingeloggt";
+    } else {
+      loginButton.textContent = "🔒 Login";
+    }
+  };
+  updateLoginUI();
+  loginButton.addEventListener("click", () => {
+    if (adminToken) {
+      saveAdminToken(null);
+      updateLoginUI();
+      setStatus("idle", "Nicht eingeloggt");
+      el("mcpPill").textContent = "MCP: –";
+      el("mcpPill").style.display = "none";
+      return;
+    }
+    loginModal.classList.remove("hidden");
+  });
   el("closeLogin").addEventListener("click", () => loginModal.classList.add("hidden"));
   loginModal.addEventListener("click", (e) => {
     if (e.target === loginModal) loginModal.classList.add("hidden");
   });
-  el("loginSubmit").addEventListener("click", () => {
+  el("loginSubmit").addEventListener("click", async () => {
     const u = el("loginUser").value.trim();
     const p = el("loginPass").value.trim();
     if (!u || !p) return;
     saveAdminToken(btoa(`${u}:${p}`));
+    updateLoginUI();
     loginModal.classList.add("hidden");
-    setStatus("online", "Eingeloggt");
+    // Config neu laden, damit Verbindung/Provider-Infos erscheinen
+    config = await fetchConfig();
+    if (config) {
+      setStatus(
+        "online",
+        config.chat?.name ? `Verbunden: ${config.chat.name}` : "Kein Chat-Backend konfiguriert"
+      );
+      el("mcpPill").textContent = "MCP: " + (config.mcp?.enabled ? "aktiv" : "inaktiv");
+      el("mcpPill").style.display = "";
+    } else {
+      setStatus("error", "Backend nicht erreichbar");
+    }
   });
 
   // Settings-Modal + Tabs
@@ -564,6 +729,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       el("cfgMcpEnabled").checked = !!config.mcp.enabled;
       el("cfgMcpBaseUrl").value = config.mcp.base_url || "";
     }
+    renderProviderList(config.providers || []);
   }
 
   // Light Mode Checkbox
@@ -572,6 +738,14 @@ document.addEventListener("DOMContentLoaded", async () => {
     lightCb.checked = (localStorage.getItem("hai_mode") || "dark") === "light";
     lightCb.addEventListener("change", () => {
       applyMode(lightCb.checked ? "light" : "dark");
+    });
+  }
+
+  // Provider hinzufügen (einmalig verdrahten)
+  if (el("addProvider")) {
+    el("addProvider").addEventListener("click", () => {
+      providerDrafts.push({ name: "", base_url: "", api_key: "", models: "", selected: false });
+      renderProviderList(providerDrafts);
     });
   }
 
@@ -591,10 +765,25 @@ document.addEventListener("DOMContentLoaded", async () => {
         enabled: el("cfgMcpEnabled").checked,
         base_url: el("cfgMcpBaseUrl").value || null,
       },
+      providers: collectProviderDrafts(),
     };
     try {
       await updateConfigOnServer(newCfg);
       alert("Konfiguration gespeichert. Backend nutzt ab jetzt die neuen Werte.");
+      // Provider-/Modell-Dropdowns oben aktualisieren
+      config = await fetchConfig();
+      const refreshed = await fetchProviders();
+      if (refreshed.length) {
+        providerSelect.innerHTML = "";
+        refreshed.forEach((p) => {
+          const opt = document.createElement("option");
+          opt.value = p.id || p.name || "";
+          opt.textContent = p.name || p.id;
+          providerSelect.appendChild(opt);
+          if (p.selected) providerSelect.value = opt.value;
+        });
+        await populateModelSelect();
+      }
     } catch (err) {
       console.error(err);
       alert("Fehler beim Speichern der Konfiguration: " + err.message);

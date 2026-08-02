@@ -143,6 +143,12 @@ async def get_config():
         masked["image"]["api_key"] = "***"
     if masked.get("mcp", {}).get("token"):
         masked["mcp"]["token"] = "***"
+    # Maskiere API-Keys der Anbieter
+    if masked.get("providers"):
+        masked["providers"] = [
+            {**p, "api_key": "***"} if p.get("api_key") else p
+            for p in masked["providers"]
+        ]
 
     return masked
 
@@ -161,6 +167,27 @@ async def update_config(new_cfg: Dict[str, Any] = Body(...), _admin=Depends(veri
             inner.update({k: v for k, v in new_cfg[section].items() if v is not None})
             cfg[section] = inner
 
+    if "providers" in new_cfg and isinstance(new_cfg["providers"], list):
+        # Vom Frontend kommen maskierte Keys; behalte die echten Keys des bisherigen Zustands.
+        current = {p.get("id"): p for p in cfg.get("providers", [])}
+        updated = []
+        for p in new_cfg["providers"]:
+            base = current.get(p.get("id"), {})
+            merged = {**base}
+            for k, v in p.items():
+                if v is None or (k == "api_key" and v in ("", "***")):
+                    continue
+                merged[k] = v
+            if not merged.get("id"):
+                # Neue Anbieter ohne id bekommen eine slug-artige id
+                slug = (merged.get("name") or "provider").strip().lower()
+                slug = "".join(c if c.isalnum() else "-" for c in slug).strip("-")
+                if not slug:
+                    slug = "provider"
+                merged["id"] = slug
+            updated.append(merged)
+        cfg["providers"] = updated
+
     save_config(cfg)
     return {"status": "ok"}
 
@@ -177,6 +204,14 @@ def get_chat_backend() -> Dict[str, Any]:
         "model": chat.get("model"),
         "backend_type": "openai-compatible",
     }
+def get_selected_provider():
+    cfg = load_config()
+    providers = cfg.get("providers", [])
+    for provider in providers:
+        if provider.get("selected"):
+            return provider
+    return None
+
 
 
 def get_image_backend() -> Dict[str, Any]:
@@ -208,13 +243,52 @@ def get_mcp_config() -> Dict[str, Any]:
 async def list_models():
     """
     Gibt eine einfache Modellliste zurück.
-    Aktuell nur das in der Config gesetzte Modell; kann später durch Provider-API ersetzt werden.
+    Nutzt den ausgewählten Provider, falls vorhanden; sonst das Standard-Gesprächsmodell.
     """
     cfg = load_config()
+    provider = get_selected_provider()
+    if provider and provider.get("models"):
+        return {"models": provider["models"]}
     model = cfg.get("chat", {}).get("model")
     if model:
         return {"models": [model]}
     return {"models": []}
+
+
+@app.get("/api/providers")
+async def list_providers():
+    """Liefert die Liste der konfigurierten Anbieter (ohne API-Keys)."""
+    cfg = load_config()
+    providers = cfg.get("providers", [])
+    return {
+        "providers": [
+            {
+                "id": p.get("id"),
+                "name": p.get("name"),
+                "models": p.get("models", []),
+                "selected": bool(p.get("selected")),
+            }
+            for p in providers
+        ]
+    }
+
+
+@app.post("/api/providers/select")
+async def select_provider(req: Body(None)):
+    """Setzt einen Anbieter als ausgewählt."""
+    data = req if isinstance(req, dict) else {}
+    provider_id = (data.get("provider_id") or "").strip()
+    if not provider_id:
+        raise HTTPException(status_code=400, detail="provider_id fehlt.")
+    cfg = load_config()
+    providers = []
+    for p in cfg.get("providers", []):
+        p = dict(p)
+        p["selected"] = p.get("id") == provider_id
+        providers.append(p)
+    cfg["providers"] = providers
+    save_config(cfg)
+    return {"status": "ok", "provider_id": provider_id}
 
 
 # ---------- File Upload ----------
@@ -289,8 +363,20 @@ async def chat(req: ChatRequest):
 
         # Forward to LLM backend
         backend = get_chat_backend()
+        provider = get_selected_provider()
+        if provider and (provider.get("base_url") or provider.get("api_key") or provider.get("name")):
+            backend = {
+                "name": provider.get("name"),
+                "base_url": provider.get("base_url"),
+                "api_key": provider.get("api_key"),
+                "model": None,
+                "backend_type": "openai-compatible",
+            }
         if not backend["base_url"]:
-            raise HTTPException(status_code=500, detail="Chat-Backend nicht konfiguriert (ENV/Config prüfen).")
+            base_url = provider.get("base_url") if provider else None
+            if not base_url:
+                raise HTTPException(status_code=500, detail="Chat-Backend nicht konfiguriert (ENV/Config prüfen).")
+            backend["base_url"] = base_url
 
         model = req.model or backend["model"]
         if not model:

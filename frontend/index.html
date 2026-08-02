@@ -54,15 +54,19 @@
     <main class="main">
       <header class="top-bar">
         <div class="model-select-wrap">
+          <label class="model-label">Anbieter</label>
+          <select id="providerSelect" class="model-select">
+            <option value="">Lädt…</option>
+          </select>
           <label class="model-label">Modell</label>
           <select id="modelSelect" class="model-select">
             <option value="">Lädt…</option>
           </select>
         </div>
-        <div class="top-bar-right">
-          <span class="pill" id="mcpPill">MCP: –</span>
-        </div>
-      </header>
+          <div class="top-bar-right">
+            <span class="pill" id="mcpPill">MCP: –</span>
+          </div>
+        </header>
 
       <section class="chat-area">
         <div id="messages" class="messages">
@@ -109,10 +113,7 @@
           <input id="loginPass" type="password" />
         </label>
         <button id="loginSubmit" class="primary-btn">Einloggen</button>
-        <p class="hint">
-          Zugangsdaten via ENV: <code>HAI_ADMIN_USER</code> / <code>HAI_ADMIN_PASSWORD</code>
-          oder <code>HAI_ADMIN_TOKEN</code>.
-        </p>
+        <p class="hint">Zugangsdaten per ENV konfiguriert.</p>
       </div>
     </div>
   </div>
@@ -146,6 +147,12 @@
             <span>Modell</span>
             <input id="cfgChatModel" type="text" placeholder="z.B. gpt-4o-mini" />
           </label>
+
+          <p class="hint" style="margin-top:0.8rem;">Anbieter:</p>
+          <div class="provider-list" id="providerList">
+            <div class="provider-list-empty">Keine Anbieter konfiguriert.</div>
+          </div>
+          <button type="button" id="addProvider" class="ghost-btn" style="margin-top:0.4rem;">+ Anbieter hinzufügen</button>
         </div>
 
         <div class="tab-panel" id="tab-image">

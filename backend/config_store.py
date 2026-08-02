@@ -13,6 +13,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
         "api_key": os.getenv("HAI_DEFAULT_CHAT_API_KEY"),
         "model": os.getenv("HAI_DEFAULT_CHAT_MODEL"),
     },
+    "providers": [],
     "image": {
         "name": os.getenv("HAI_DEFAULT_IMAGE_NAME"),
         "base_url": os.getenv("HAI_DEFAULT_IMAGE_BASE_URL"),

@@ -217,6 +217,7 @@ body {
 }
 .status-dot.online { background: var(--success); box-shadow: 0 0 8px var(--success); }
 .status-dot.error { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+.status-dot.idle { background: var(--text-muted); }
 
 .sidebar-actions { display: flex; gap: 0.4rem; }
 .ghost-btn {
@@ -305,18 +306,25 @@ body {
   font-size: 0.92rem;
   line-height: 1.5;
   white-space: pre-wrap;
+  animation: message-in 0.18s ease;
+}
+@keyframes message-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 .message.user {
   align-self: flex-end;
-  background: var(--accent);
+  background: linear-gradient(135deg, var(--accent), var(--accent-hover));
   color: white;
   border-bottom-right-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
 }
 .message.assistant {
   align-self: flex-start;
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 .message.system {
   align-self: center;
@@ -499,6 +507,59 @@ body {
 .checkbox-field input {
   width: 16px;
   height: 16px;
+}
+
+/* Provider-Liste im Settings-Modal */
+.provider-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.provider-list-empty {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding: 0.4rem 0;
+}
+.provider-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.6rem;
+  background: var(--bg);
+}
+.provider-card .provider-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.provider-card input[type="text"] {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 0.8rem;
+}
+.provider-card input[type="text"]:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.provider-card .provider-actions {
+  display: flex;
+  gap: 0.4rem;
+  margin-top: 0.2rem;
+}
+.provider-card .provider-remove {
+  background: none;
+  border: none;
+  color: var(--danger);
+  cursor: pointer;
+  font-size: 0.85rem;
 }
 
 .primary-btn {
