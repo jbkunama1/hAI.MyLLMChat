@@ -1,6 +1,6 @@
 import os
 import base64
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 import sqlite3
 from pathlib import Path
 
@@ -274,7 +274,7 @@ async def list_providers():
 
 
 @app.post("/api/providers/select")
-async def select_provider(req: Body(None)):
+async def select_provider(req: Optional[Dict[str, Any]] = Body(None)):
     """Setzt einen Anbieter als ausgewählt."""
     data = req if isinstance(req, dict) else {}
     provider_id = (data.get("provider_id") or "").strip()
