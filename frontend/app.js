@@ -1,5 +1,6 @@
 let adminToken = null;
 let config = null;
+let currentChatId = null; // Track current chat ID
 let history = [];
 let attachments = [];
 let mode = "chat"; // "chat" | "image"
@@ -114,6 +115,18 @@ async function fetchModels() {
   }
 }
 
+async function fetchChats() {
+  try {
+    const res = await fetch("/api/chats");
+    if (!res.ok) return [];
+    const data = await res.json();
+    return data || [];
+  } catch (e) {
+    console.error("Chats error:", e);
+    return [];
+  }
+}
+
 async function updateConfigOnServer(newCfg) {
   if (!adminToken) throw new Error("Nicht eingeloggt.");
   const res = await fetch("/api/config/update", {
@@ -125,9 +138,10 @@ async function updateConfigOnServer(newCfg) {
   return await res.json();
 }
 
-async function sendChatMessage(messages, model) {
-  const body = { messages };
+async function sendChatMessage(message, model, chatId) {
+  const body = { messages: [message] };
   if (model) body.model = model;
+  if (chatId != null) body.chat_id = chatId;
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -155,8 +169,9 @@ async function uploadFile(file) {
   return await res.json();
 }
 
-function appendMessage(role, text) {
+function appendMessage(role, text, clear = false) {
   const container = el("messages");
+  if (clear) container.innerHTML = "";
   const empty = el("emptyState");
   if (empty) empty.remove();
   const msg = document.createElement("div");
@@ -166,8 +181,9 @@ function appendMessage(role, text) {
   container.scrollTop = container.scrollHeight;
 }
 
-function appendImageMessage(urls) {
+function appendImageMessage(urls, clear = false) {
   const container = el("messages");
+  if (clear) container.innerHTML = "";
   const empty = el("emptyState");
   if (empty) empty.remove();
   const msg = document.createElement("div");
@@ -221,11 +237,94 @@ function buildUserMessageText(rawText) {
   return `${fileNotes}\n\n${rawText}`.trim();
 }
 
-document.addEventListener("DOMContentLoaded", async () => {
-  loadAdminToken();
-  loadThemeAndMode();
+function showEmptyState() {
+  const container = el("messages");
+  container.innerHTML = `<div class="empty-state" id="emptyState">
+    <div class="empty-icon">💬</div>
+    <h2>Willkommen bei hAI.MyLLMChat</h2>
+    <p>Stelle eine Frage, lade eine Datei zur Analyse hoch oder generiere ein Bild.</p>
+  </div>`;
+}
 
-  // Sidebar mobile toggle
+function resetChat() {
+  history = [];
+  showEmptyState();
+}
+
+async function createNewChat() {
+  try {
+    const res = await fetch("/api/chat/new", { method: "POST" });
+    const data = await res.json();
+    currentChatId = data.chat_id;
+    resetChat();
+    await renderChatList();
+  } catch (e) {
+    console.error("Error creating new chat:", e);
+    alert("Fehler beim Erstellen eines neuen Chats.");
+  }
+}
+
+async function loadChatHistory(chatId) {
+  try {
+    const res = await fetch(`/api/chat/${chatId}/history`);
+    if (!res.ok) throw new Error(`History-Fehler (${res.status})`);
+    const messages = await res.json();
+    history = messages.map((m) => ({ role: m.role, content: m.content }));
+    const container = el("messages");
+    const empty = el("emptyState");
+    if (empty) empty.remove();
+    container.innerHTML = "";
+    messages.forEach((m) => {
+      appendMessage(m.role, m.content);
+    });
+    if (!messages.length) showEmptyState();
+  } catch (e) {
+    console.error("Error loading history:", e);
+    showEmptyState();
+  }
+}
+
+async function renderChatList() {
+  const list = el("conversationList");
+  if (!list) return;
+  try {
+    const chats = await fetchChats();
+    list.innerHTML = "";
+    if (!chats.length) {
+      const defaultItem = document.createElement("div");
+      defaultItem.className = "conversation-item active";
+      defaultItem.innerHTML = `<span class="conv-title">Keine Chats</span>`;
+      defaultItem.addEventListener("click", createNewChat);
+      list.appendChild(defaultItem);
+      return chats;
+    }
+    chats.forEach((c) => {
+      const item = document.createElement("div");
+      item.className = "conversation-item";
+      if (c.id === currentChatId) item.classList.add("active");
+      item.dataset.id = String(c.id);
+      const title = c.name && c.name !== "New Chat" ? c.name : "Neuer Chat";
+      item.innerHTML = `<span class="conv-title">${escapeHtml(title)}</span>`;
+      list.appendChild(item);
+    });
+    return chats;
+  } catch (e) {
+    console.error("renderChatList error:", e);
+    return [];
+  }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// Sidebar-Events
+const setupSidebar = () => {
   const sidebar = el("sidebar");
   const overlay = el("sidebarOverlay");
   const openSidebar = () => {
@@ -238,8 +337,59 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
   el("menuToggle").addEventListener("click", openSidebar);
   el("closeSidebar").addEventListener("click", closeSidebarFn);
-  overlay.addEventListener("click", closeSidebarFn);
-  el("settingsButtonMobile").addEventListener("click", () => el("settingsButton").click());
+  if (overlay) overlay.addEventListener("click", closeSidebarFn);
+  if (el("settingsButtonMobile"))
+    el("settingsButtonMobile").addEventListener("click", () => el("settingsButton").click());
+};
+
+// Theme-Swatches, Background, Font-Size, Font-Family clicks
+const setupDesignListeners = () => {
+  document.querySelectorAll(".theme-swatch").forEach((sw) => {
+    sw.addEventListener("click", () => applyTheme(sw.dataset.theme));
+  });
+  document.querySelectorAll(".bg-swatch").forEach((b) => {
+    b.addEventListener("click", () => applyBackground(b.dataset.bg));
+  });
+  document.querySelectorAll(".font-size-btn").forEach((b) => {
+    b.addEventListener("click", () => applyFontSize(b.dataset.fontsize));
+  });
+  document.querySelectorAll(".font-family-btn").forEach((b) => {
+    b.addEventListener("click", () => applyFontFamily(b.dataset.fontfamily));
+  });
+};
+
+document.addEventListener("DOMContentLoaded", async () => {
+  loadAdminToken();
+  loadThemeAndMode();
+  setupSidebar();
+  setupDesignListeners();
+
+  // New chat button
+  el("newChatButton").addEventListener("click", createNewChat);
+
+  // Conversation list click -> switch chats
+  el("conversationList").addEventListener("click", async (e) => {
+    let target = e.target;
+    while (target !== null && !target.classList.contains("conversation-item")) {
+      target = target.parentElement;
+    }
+    if (target && target.dataset.id) {
+      const newChatId = Number(target.dataset.id);
+      if (!isNaN(newChatId) && newChatId !== currentChatId) {
+        currentChatId = newChatId;
+        await loadChatHistory(currentChatId);
+        await renderChatList();
+      }
+    }
+  });
+
+  // Initial chat list load + auto-select most recent
+  const chats = await renderChatList();
+  if (!currentChatId && chats && chats.length) {
+    currentChatId = chats[0].id;
+    await loadChatHistory(currentChatId);
+    await renderChatList();
+  }
 
   // Config laden
   config = await fetchConfig();
@@ -339,17 +489,19 @@ document.addEventListener("DOMContentLoaded", async () => {
           appendMessage("assistant", "Keine Bilder erhalten (Image-Backend prüfen).");
         }
       } else {
-        const messages = [];
-        for (const m of history) messages.push(m);
-        messages.push({ role: "user", content: finalText });
-
         const model = select.value || undefined;
-        const resp = await sendChatMessage(messages, model);
+        const resp = await sendChatMessage(
+          { role: "user", content: finalText },
+          model,
+          currentChatId
+        );
         const assistantText = resp.content || "";
+        currentChatId = resp.chat_id;
         appendMessage("assistant", assistantText);
 
         history.push({ role: "user", content: finalText });
         history.push({ role: "assistant", content: assistantText });
+        await renderChatList();
       }
     } catch (err) {
       console.error(err);
@@ -397,35 +549,6 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   });
 
-  // Theme-Swatches klicken
-  document.querySelectorAll(".theme-swatch").forEach((sw) => {
-    sw.addEventListener("click", () => applyTheme(sw.dataset.theme));
-  });
-
-  // Hintergrund-Optionen
-  document.querySelectorAll(".bg-swatch").forEach((b) => {
-    b.addEventListener("click", () => applyBackground(b.dataset.bg));
-  });
-
-  // Schriftgrößen
-  document.querySelectorAll(".font-size-btn").forEach((b) => {
-    b.addEventListener("click", () => applyFontSize(b.dataset.fontsize));
-  });
-
-  // Schriftarten
-  document.querySelectorAll(".font-family-btn").forEach((b) => {
-    b.addEventListener("click", () => applyFontFamily(b.dataset.fontfamily));
-  });
-
-  // Light Mode Checkbox
-  const lightCb = el("cfgLightMode");
-  if (lightCb) {
-    lightCb.checked = (localStorage.getItem("hai_mode") || "dark") === "light";
-    lightCb.addEventListener("change", () => {
-      applyMode(lightCb.checked ? "light" : "dark");
-    });
-  }
-
   // Settings-Felder initial befüllen
   if (config) {
     if (config.chat) {
@@ -443,7 +566,16 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
-  // Config speichern (nur Backend-relevante Felder)
+  // Light Mode Checkbox
+  const lightCb = el("cfgLightMode");
+  if (lightCb) {
+    lightCb.checked = (localStorage.getItem("hai_mode") || "dark") === "light";
+    lightCb.addEventListener("change", () => {
+      applyMode(lightCb.checked ? "light" : "dark");
+    });
+  }
+
+  // Config speichern
   el("saveConfig").addEventListener("click", async () => {
     const newCfg = {
       chat: {
