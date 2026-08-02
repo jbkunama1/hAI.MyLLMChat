@@ -347,10 +347,52 @@ function renderProviderList(list) {
   if (!el("providerList")) return;
   const container = el("providerList");
   container.innerHTML = "";
-  if (!providerDrafts.length) {
-    container.innerHTML = `<div class="provider-list-empty">Keine Anbieter konfiguriert.</div>`;
-  }
+  // Feste Karte für den Standard aus ENV/Chat-Config (nicht löschbar)
+  const defaultSelected = !providerDrafts.some((p) => p.selected);
+  renderDefaultProviderCard(defaultSelected);
   providerDrafts.forEach((p, i) => renderProviderCard(p, i));
+}
+
+function renderDefaultProviderCard(selected) {
+  const container = el("providerList");
+  const card = document.createElement("div");
+  card.className = "provider-card default-provider-card";
+  card.innerHTML = `
+    <div class="provider-row">
+      <label style="flex:1;min-width:0;">Name
+        <input id="pvDefaultName" type="text" value="${escapeHtml(config?.chat?.name || "Standard (ENV)")}" readonly />
+      </label>
+    </div>
+    <div class="provider-row">
+      <label style="flex:1;min-width:0;">Base URL
+        <input id="pvDefaultUrl" type="text" value="${escapeHtml(config?.chat?.base_url || "")}" readonly />
+      </label>
+    </div>
+    <div class="provider-row">
+      <label style="flex:1;min-width:0;">Modell
+        <input id="pvDefaultModel" type="text" value="${escapeHtml(config?.chat?.model || "")}" readonly />
+      </label>
+    </div>
+    <div class="provider-row">
+      <label class="checkbox-field">
+        <input id="pvDefaultSelected" type="checkbox" ${selected ? "checked" : ""} />
+        <span>Standard-Anbieter (ENV)</span>
+      </label>
+    </div>
+    <div class="provider-actions">
+      <span class="provider-default-hint">Standard aus ENV/Config — kann nicht entfernt werden.</span>
+    </div>
+  `;
+  container.appendChild(card);
+
+  card.querySelector("#pvDefaultSelected").addEventListener("change", (e) => {
+    if (e.target.checked) {
+      providerDrafts.forEach((_, i) => {
+        const cb = el(`pvSelected${i}`);
+        if (cb) cb.checked = false;
+      });
+    }
+  });
 }
 
 function renderProviderCard(p, i) {
@@ -391,6 +433,17 @@ function renderProviderCard(p, i) {
   `;
   container.appendChild(card);
 
+  // Wenn ein konfigurierter Anbieter als Standard gewählt wird, ENV-Standard abwählen
+  const selCb = card.querySelector(`#pvSelected${i}`);
+  if (selCb) {
+    selCb.addEventListener("change", (e) => {
+      if (e.target.checked) {
+        const defCb = el("pvDefaultSelected");
+        if (defCb) defCb.checked = false;
+      }
+    });
+  }
+
   card.querySelectorAll("[data-action=remove]").forEach((btn) =>
     btn.addEventListener("click", () => {
       providerDrafts.splice(i, 1);
@@ -400,6 +453,8 @@ function renderProviderCard(p, i) {
 }
 
 function collectProviderDrafts() {
+  // Wenn ENV-Standard gewählt ist, werden alle konfigurierten deselektiert
+  const defaultSelected = el("pvDefaultSelected")?.checked || false;
   return providerDrafts.map((p, i) => ({
     id: p.id, // id wird beim Speichern beibehalten oder neu generiert
     name: (el(`pvName${i}`)?.value || "").trim(),
@@ -409,7 +464,7 @@ function collectProviderDrafts() {
       .split(",")
       .map((m) => m.trim())
       .filter(Boolean),
-    selected: el(`pvSelected${i}`)?.checked || false,
+    selected: defaultSelected ? false : (el(`pvSelected${i}`)?.checked || false),
   }));
 }
 

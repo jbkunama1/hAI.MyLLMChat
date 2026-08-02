@@ -529,6 +529,18 @@ body {
   padding: 0.6rem;
   background: var(--bg);
 }
+.provider-card.default-provider-card {
+  border-color: var(--accent);
+  background: var(--bg-elevated);
+}
+.provider-card.default-provider-card input[type="text"] {
+  color: var(--text-muted);
+}
+.provider-default-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  align-self: flex-end;
+}
 .provider-card .provider-row {
   display: flex;
   align-items: center;
