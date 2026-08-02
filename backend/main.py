@@ -1,14 +1,16 @@
 import os
 import base64
 from typing import Any, Dict, List
+import sqlite3
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Body, UploadFile, File
+from fastapi import FastAPI, HTTPException, Depends, Header, Body, UploadFile, File, Query
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 
-from backend.config_store import load_config, save_config
+from backend.config_store import load_config, save_config, DATA_DIR
 
 app = FastAPI()
 
@@ -50,6 +52,46 @@ def verify_admin(x_admin_auth: str | None = Header(default=None)) -> None:
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+# ---------- Database setup ----------
+
+
+def get_db_connection():
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(DATA_DIR / "chat.db")
+    conn.row_factory = sqlite3.Row  # to return dict-like rows
+    return conn
+
+
+def init_db():
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS chats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS messages (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chat_id INTEGER NOT NULL,
+                role TEXT NOT NULL,  -- 'user' or 'assistant'
+                content TEXT NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (chat_id) REFERENCES chats(id)
+            )
+        ''')
+        conn.commit()
+    finally:
+        conn.close()
+
+
+# Initialize database on startup
+init_db()
+
+
 # ---------- API-Schemas ----------
 
 class ChatMessage(BaseModel):
@@ -61,10 +103,12 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessage]
     model: str | None = None
     temperature: float | None = 0.7
+    chat_id: int | None = None  # optional chat ID
 
 
 class ChatResponse(BaseModel):
     content: str
+    chat_id: int  # we always return the chat_id used
 
 
 class ImageRequest(BaseModel):
@@ -188,49 +232,138 @@ async def upload(file: UploadFile = File(...)):
     }
 
 
-# ---------- Chat-Endpoint (OpenAI-kompatibel) ----------
+# ---------- Chat-Endpoints ----------
+
+@app.post("/api/chat/new")
+async def create_new_chat():
+    """Create a new chat and return its ID."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO chats (name) VALUES (?)", ("New Chat",))
+        conn.commit()
+        chat_id = cursor.lastrowid
+        return {"chat_id": chat_id}
+    finally:
+        conn.close()
+
 
 @app.post("/api/chat", response_model=ChatResponse)
 async def chat(req: ChatRequest):
-    backend = get_chat_backend()
-
-    if not backend["base_url"]:
-        raise HTTPException(status_code=500, detail="Chat-Backend nicht konfiguriert (ENV/Config prüfen).")
-
-    model = req.model or backend["model"]
-    if not model:
-        raise HTTPException(status_code=400, detail="Kein Modell angegeben (weder Config noch Request).")
-
-    url = backend["base_url"].rstrip("/") + "/chat/completions"
-
-    payload = {
-        "model": model,
-        "messages": [{"role": m.role, "content": m.content} for m in req.messages],
-        "temperature": req.temperature,
-        "stream": False,
-    }
-
-    headers = {"Content-Type": "application/json"}
-    if backend["api_key"]:
-        headers["Authorization"] = f"Bearer {backend['api_key']}"
-
+    conn = get_db_connection()
     try:
-        async with httpx.AsyncClient(timeout=60) as client:
-            resp = await client.post(url, json=payload, headers=headers)
-        if resp.status_code != 200:
-            print("Upstream error:", resp.status_code, resp.text)
-            raise HTTPException(status_code=502, detail=f"Upstream-Fehler: {resp.status_code}")
-        data = resp.json()
-    except httpx.RequestError as e:
-        print("HTTP error:", e)
-        raise HTTPException(status_code=502, detail="Chat-Backend nicht erreichbar.")
+        cursor = conn.cursor()
 
+        # Determine chat ID: use provided, or create new if none/invalid
+        if req.chat_id is not None:
+            cursor.execute("SELECT id FROM chats WHERE id=?", (req.chat_id,))
+            chat_row = cursor.fetchone()
+            if chat_row:
+                chat_id = req.chat_id
+            else:
+                # Provided chat_id doesn't exist -> create new chat
+                cursor.execute("INSERT INTO chats (name) VALUES (?)", ("New Chat",))
+                conn.commit()
+                chat_id = cursor.lastrowid
+        else:
+            # No chat_id provided -> create new chat
+            cursor.execute("INSERT INTO chats (name) VALUES (?)", ("New Chat",))
+            conn.commit()
+            chat_id = cursor.lastrowid
+
+        # Store the incoming messages (user's new message(s))
+        for msg in req.messages:
+            cursor.execute(
+                "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+                (chat_id, msg.role, msg.content)
+            )
+        conn.commit()
+
+        # Retrieve full chat history from database for context
+        cursor.execute(
+            "SELECT role, content FROM messages WHERE chat_id=? ORDER BY created_at",
+            (chat_id,)
+        )
+        db_messages = cursor.fetchall()
+        history_for_llm = [{"role": row["role"], "content": row["content"]} for row in db_messages]
+
+        # Forward to LLM backend
+        backend = get_chat_backend()
+        if not backend["base_url"]:
+            raise HTTPException(status_code=500, detail="Chat-Backend nicht konfiguriert (ENV/Config prüfen).")
+
+        model = req.model or backend["model"]
+        if not model:
+            raise HTTPException(status_code=400, detail="Kein Modell angegeben (weder Config noch Request).")
+
+        url = backend["base_url"].rstrip("/") + "/chat/completions"
+
+        payload = {
+            "model": model,
+            "messages": history_for_llm,
+            "temperature": req.temperature,
+            "stream": False,
+        }
+
+        headers = {"Content-Type": "application/json"}
+        if backend["api_key"]:
+            headers["Authorization"] = f"Bearer {backend['api_key']}"
+
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.post(url, json=payload, headers=headers)
+            if resp.status_code != 200:
+                print("Upstream error:", resp.status_code, resp.text)
+                raise HTTPException(status_code=502, detail=f"Upstream-Fehler: {resp.status_code}")
+            data = resp.json()
+        except httpx.RequestError as e:
+            print("HTTP error:", e)
+            raise HTTPException(status_code=502, detail="Chat-Backend nicht erreichbar.")
+
+        try:
+            content = data["choices"][0]["message"]["content"]
+        except Exception:
+            raise HTTPException(status_code=500, detail="Unerwartetes Antwortformat vom LLM-Backend.")
+
+        # Store the assistant response so history is complete
+        cursor.execute(
+            "INSERT INTO messages (chat_id, role, content) VALUES (?, ?, ?)",
+            (chat_id, "assistant", content)
+        )
+        conn.commit()
+
+        return ChatResponse(content=content, chat_id=chat_id)
+    finally:
+        conn.close()
+
+
+@app.get("/api/chat/{chat_id}/history")
+async def get_chat_history(chat_id: int):
+    """Get message history for a specific chat."""
+    conn = get_db_connection()
     try:
-        content = data["choices"][0]["message"]["content"]
-    except Exception:
-        raise HTTPException(status_code=500, detail="Unerwartetes Antwortformat vom LLM-Backend.")
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT role, content, created_at FROM messages WHERE chat_id=? ORDER BY created_at",
+            (chat_id,)
+        )
+        messages = cursor.fetchall()
+        return [{"role": row["role"], "content": row["content"], "timestamp": row["created_at"]} for row in messages]
+    finally:
+        conn.close()
 
-    return ChatResponse(content=content)
+
+@app.get("/api/chats")
+async def get_chats():
+    """Get list of all chats (for sidebar)."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, created_at FROM chats ORDER BY created_at DESC")
+        chats = cursor.fetchall()
+        return [{"id": row["id"], "name": row["name"], "created_at": row["created_at"]} for row in chats]
+    finally:
+        conn.close()
 
 
 # ---------- Image-Endpoint (OpenAI-kompatibel) ----------
