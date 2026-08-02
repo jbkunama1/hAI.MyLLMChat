@@ -257,36 +257,64 @@ async def list_models():
 
 @app.get("/api/providers")
 async def list_providers():
-    """Liefert die Liste der konfigurierten Anbieter (ohne API-Keys)."""
+    """Liefert die Liste der konfigurierten Anbieter (ohne API-Keys).
+    Ein virtueller 'default'-Eintrag (Standard aus ENV/Chat-Config) steht immer an erster Stelle."""
     cfg = load_config()
     providers = cfg.get("providers", [])
-    return {
-        "providers": [
-            {
-                "id": p.get("id"),
-                "name": p.get("name"),
-                "models": p.get("models", []),
-                "selected": bool(p.get("selected")),
-            }
-            for p in providers
-        ]
-    }
+    any_selected = any(p.get("selected") for p in providers)
+    chat = cfg.get("chat", {})
+    default_model = chat.get("model")
+    default_name = chat.get("name") or "Standard (ENV)"
+    result = [
+        {
+            "id": "default",
+            "name": default_name,
+            "models": [default_model] if default_model else [],
+            "selected": not any_selected,
+            "is_default": True,
+        }
+    ]
+    result += [
+        {
+            "id": p.get("id"),
+            "name": p.get("name"),
+            "models": p.get("models", []),
+            "selected": bool(p.get("selected")),
+            "is_default": False,
+        }
+        for p in providers
+    ]
+    return {"providers": result}
 
 
 @app.post("/api/providers/select")
 async def select_provider(req: Optional[Dict[str, Any]] = Body(None)):
-    """Setzt einen Anbieter als ausgewählt."""
+    """Setzt einen Anbieter als ausgewählt. 'default' = ENV-Standard (deselektiert alle konfigurierten)."""
     data = req if isinstance(req, dict) else {}
     provider_id = (data.get("provider_id") or "").strip()
     if not provider_id:
         raise HTTPException(status_code=400, detail="provider_id fehlt.")
     cfg = load_config()
-    providers = []
-    for p in cfg.get("providers", []):
-        p = dict(p)
-        p["selected"] = p.get("id") == provider_id
-        providers.append(p)
-    cfg["providers"] = providers
+
+    if provider_id == "default":
+        # ENV-Standard: keinen konfigurierten Anbieter auswählen
+        for p in cfg.get("providers", []):
+            p["selected"] = False
+    else:
+        providers = []
+        found = False
+        for p in cfg.get("providers", []):
+            p = dict(p)
+            if p.get("id") == provider_id:
+                p["selected"] = True
+                found = True
+            else:
+                p["selected"] = False
+            providers.append(p)
+        if not found:
+            raise HTTPException(status_code=404, detail="Anbieter nicht gefunden")
+        cfg["providers"] = providers
+
     save_config(cfg)
     return {"status": "ok", "provider_id": provider_id}
 
