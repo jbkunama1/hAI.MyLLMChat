@@ -1,5 +1,9 @@
 # hAI.MyLLMChat
 
+<a href="https://www.buymeacoffee.com/highfish">
+<img src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174">
+</a>
+
 Moderne Chat‑UI mit Unterstützung für:
 - Text‑Chat über beliebige OpenAI‑kompatible APIs
 - Bildgenerierung (z.B. über OpenRouter Images)
@@ -94,3 +98,4 @@ services:
 ## Lizenz
 
 Siehe `LICENSE` im Repository.
+
