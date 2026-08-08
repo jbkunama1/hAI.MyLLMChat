@@ -1,4 +1,10 @@
 # hAI.MyLLMChat
+[![Status](https://img.shields.io/badge/status-active-brightgreen?style=for-the-badge)](https://github.com/jbkunama1/hAI.MyLLMChat)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/jbkunama1/hAI.MyLLMChat)
+[![LLM](https://img.shields.io/badge/LLM-OpenAI%20Compatible-10a37f?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/jbkunama1/hAI.MyLLMChat)
+[![MCP](https://img.shields.io/badge/MCP-Server-6f42c1?style=for-the-badge&logo=mcp&logoColor=white)](https://github.com/jbkunama1/hAI.MyLLMChat)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
+
 
 
 
