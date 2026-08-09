@@ -130,6 +130,7 @@
         <button class="tab-btn active" data-tab="tab-chat">Chat</button>
         <button class="tab-btn" data-tab="tab-image">Bild</button>
         <button class="tab-btn" data-tab="tab-mcp">MCP</button>
+        <button class="tab-btn" data-tab="tab-admin">Admin</button>
         <button class="tab-btn" data-tab="tab-theme">Design</button>
       </div>
 
@@ -175,6 +176,21 @@
             <span>Base URL</span>
             <input id="cfgMcpBaseUrl" type="text" placeholder="http://mcpo:8000" />
           </label>
+        </div>
+
+        <div class="tab-panel" id="tab-admin">
+          <label class="field">
+            <span>JSON-Konfiguration (Provider, Modelle, MCP-Server)</span>
+            <textarea id="adminConfigJson" rows="16" class="composer-input" spellcheck="false"
+              placeholder='{"providers": [], "models": [], "mcp_servers": []}'></textarea>
+          </label>
+          <div class="provider-actions">
+            <button type="button" id="adminLoadJson" class="ghost-btn">Neu laden</button>
+            <button type="button" id="adminSaveJson" class="primary-btn">Admin-Konfiguration speichern</button>
+          </div>
+          <p class="hint">
+            Benötigt Admin-Login. API-Keys werden hier unverschlüsselt in <code>/data/config.json</code> gespeichert.
+          </p>
         </div>
 
         <div class="tab-panel" id="tab-theme">

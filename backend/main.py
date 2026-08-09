@@ -4,13 +4,14 @@ from typing import Any, Dict, List, Optional
 import sqlite3
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Body, UploadFile, File, Query
+from fastapi import FastAPI, HTTPException, Depends, Header, Body, UploadFile, File, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import httpx
 
 from backend.config_store import load_config, save_config, DATA_DIR
+from backend.mcp_proxy import get_mcp_servers, proxy_request
 
 app = FastAPI()
 
@@ -148,6 +149,12 @@ async def get_config():
         masked["providers"] = [
             {**p, "api_key": "***"} if p.get("api_key") else p
             for p in masked["providers"]
+        ]
+    # Maskiere API-Keys der MCP-Server
+    if masked.get("mcp_servers"):
+        masked["mcp_servers"] = [
+            {**s, "api_key": "***"} if s.get("api_key") else s
+            for s in masked["mcp_servers"]
         ]
 
     return masked
@@ -530,6 +537,101 @@ async def list_mcp_tools():
     if not mcp["enabled"] or not mcp["base_url"]:
         return {"enabled": False, "tools": []}
     return {"enabled": True, "tools": []}
+
+
+# ---------- MCP-Proxy-Endpoints ----------
+
+@app.get("/api/mcp/servers")
+async def mcp_servers():
+    """Listet konfigurierte MCP-Server (ohne API-Keys)."""
+    return {
+        "servers": [
+            {**s, "api_key": "***"} if s.get("api_key") else s
+            for s in get_mcp_servers()
+        ]
+    }
+
+
+@app.post("/api/mcp/{server_name}/{path:path}")
+async def mcp_proxy(server_name: str, path: str, request: Request):
+    """
+    Proxyt POST/PUT/PATCH/GET/DELETE an den konfigurierten MCP-Server.
+    Beispiel: POST /api/mcp/myserver/tools/call
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        return await proxy_request(server_name, path, request.method, body)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"MCP-Server nicht erreichbar: {e}")
+
+
+# ---------- Admin Settings Endpoints ----------
+
+@app.get("/api/admin/config", dependencies=[Depends(verify_admin)])
+async def get_admin_config():
+    """Retrieves all admin configuration (includes unmasked API keys)."""
+    cfg = load_config()
+    return cfg
+
+
+@app.post("/api/admin/config/update", dependencies=[Depends(verify_admin)])
+async def update_admin_config(new_cfg: Dict[str, Any] = Body(...)):
+    """
+    Updates administrative configuration including providers, models, and MCP servers.
+    Only accessible with admin authentication.
+    """
+    cfg = load_config()
+
+    # Update providers
+    if "providers" in new_cfg and isinstance(new_cfg["providers"], list):
+        current = {p.get("id"): p for p in cfg.get("providers", [])}
+        updated = []
+        for p in new_cfg["providers"]:
+            base = current.get(p.get("id"), {})
+            merged = {**base}
+            for k, v in p.items():
+                if v is None or (k == "api_key" and v in ("", "***")):
+                    continue
+                merged[k] = v
+            if not merged.get("id"):
+                slug = (merged.get("name") or "provider").strip().lower()
+                slug = "".join(c if c.isalnum() else "-" for c in slug).strip("-")
+                if not slug:
+                    slug = "provider"
+                merged["id"] = slug
+            updated.append(merged)
+        cfg["providers"] = updated
+
+    # Update models
+    if "models" in new_cfg and isinstance(new_cfg["models"], list):
+        current = {m.get("id"): m for m in cfg.get("models", [])}
+        updated = []
+        for m in new_cfg["models"]:
+            base = current.get(m.get("id"), {})
+            merged = {**base, "name": m.get("name"), "id": m.get("id")}
+            updated.append(merged)
+        cfg["models"] = updated
+
+    # Update MCP servers
+    if "mcp_servers" in new_cfg and isinstance(new_cfg["mcp_servers"], list):
+        cfg["mcp_servers"] = new_cfg["mcp_servers"]
+
+    # Update core sections
+    for section in ("chat", "image", "mcp"):
+        if section in new_cfg and isinstance(new_cfg[section], dict):
+            inner = cfg.get(section, {})
+            inner.update({k: v for k, v in new_cfg[section].items() if v is not None})
+            cfg[section] = inner
+
+    save_config(cfg)
+    return {"status": "ok"}
 
 
 # ---------- Static files (Frontend) ----------

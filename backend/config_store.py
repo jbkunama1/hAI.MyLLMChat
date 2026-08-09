@@ -7,13 +7,15 @@ DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 CONFIG_PATH = DATA_DIR / "config.json"
 
 DEFAULT_CONFIG: Dict[str, Any] = {
+    "providers": [],
+    "models": [],
+    "mcp_servers": [],
     "chat": {
         "name": os.getenv("HAI_DEFAULT_CHAT_NAME"),
         "base_url": os.getenv("HAI_DEFAULT_CHAT_BASE_URL"),
         "api_key": os.getenv("HAI_DEFAULT_CHAT_API_KEY"),
         "model": os.getenv("HAI_DEFAULT_CHAT_MODEL"),
     },
-    "providers": [],
     "image": {
         "name": os.getenv("HAI_DEFAULT_IMAGE_NAME"),
         "base_url": os.getenv("HAI_DEFAULT_IMAGE_BASE_URL"),
