@@ -7,10 +7,17 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Depends, Header, Body, UploadFile, File, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 import httpx
 
-from backend.config_store import load_config, save_config, DATA_DIR
+from backend.config_store import (
+    load_config,
+    save_config,
+    DATA_DIR,
+    ProviderConfig,
+    ModelConfig,
+    McpServerConfig,
+)
 from backend.mcp_proxy import get_mcp_servers, proxy_request
 
 app = FastAPI()
@@ -574,6 +581,16 @@ async def mcp_proxy(server_name: str, path: str, request: Request):
 
 # ---------- Admin Settings Endpoints ----------
 
+def _validated(items: Any, model) -> List[Dict[str, Any]]:
+    """Validiert eine eingehende Liste gegen das Pydantic-Model; wirft 422 bei ungültigen Einträgen."""
+    if not isinstance(items, list):
+        raise HTTPException(status_code=422, detail="Erwartet eine Liste.")
+    try:
+        return [m.model_dump(exclude_unset=True) for m in (model(**i) for i in items)]
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors(include_url=False))
+
+
 @app.get("/api/admin/config", dependencies=[Depends(verify_admin)])
 async def get_admin_config():
     """Retrieves all admin configuration (includes unmasked API keys)."""
@@ -590,10 +607,11 @@ async def update_admin_config(new_cfg: Dict[str, Any] = Body(...)):
     cfg = load_config()
 
     # Update providers
-    if "providers" in new_cfg and isinstance(new_cfg["providers"], list):
+    if "providers" in new_cfg:
+        providers = _validated(new_cfg["providers"], ProviderConfig)
         current = {p.get("id"): p for p in cfg.get("providers", [])}
         updated = []
-        for p in new_cfg["providers"]:
+        for p in providers:
             base = current.get(p.get("id"), {})
             merged = {**base}
             for k, v in p.items():
@@ -610,18 +628,19 @@ async def update_admin_config(new_cfg: Dict[str, Any] = Body(...)):
         cfg["providers"] = updated
 
     # Update models
-    if "models" in new_cfg and isinstance(new_cfg["models"], list):
+    if "models" in new_cfg:
+        models = _validated(new_cfg["models"], ModelConfig)
         current = {m.get("id"): m for m in cfg.get("models", [])}
         updated = []
-        for m in new_cfg["models"]:
+        for m in models:
             base = current.get(m.get("id"), {})
             merged = {**base, "name": m.get("name"), "id": m.get("id")}
             updated.append(merged)
         cfg["models"] = updated
 
     # Update MCP servers
-    if "mcp_servers" in new_cfg and isinstance(new_cfg["mcp_servers"], list):
-        cfg["mcp_servers"] = new_cfg["mcp_servers"]
+    if "mcp_servers" in new_cfg:
+        cfg["mcp_servers"] = _validated(new_cfg["mcp_servers"], McpServerConfig)
 
     # Update core sections
     for section in ("chat", "image", "mcp"):
