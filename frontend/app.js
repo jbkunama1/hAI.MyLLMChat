@@ -150,6 +150,26 @@ async function updateConfigOnServer(newCfg) {
   return await res.json();
 }
 
+async function fetchAdminConfig() {
+  if (!adminToken) return null;
+  const res = await fetch("/api/admin/config", {
+    headers: { "X-Admin-Auth": adminToken },
+  });
+  if (!res.ok) throw new Error(`Admin-Config-Fehler: ${res.status}`);
+  return await res.json();
+}
+
+async function saveAdminConfig(cfg) {
+  if (!adminToken) throw new Error("Nicht eingeloggt.");
+  const res = await fetch("/api/admin/config/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Admin-Auth": adminToken },
+    body: JSON.stringify(cfg),
+  });
+  if (!res.ok) throw new Error(`Admin-Config-Update-Fehler: ${res.status}`);
+  return await res.json();
+}
+
 async function sendChatMessage(message, model, chatId) {
   const body = { messages: [message] };
   if (model) body.model = model;
@@ -749,15 +769,46 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // Settings-Modal + Tabs
+  // Admin-Tab: JSON-Konfiguration laden/speichern
   const settingsModal = el("settingsModal");
   const openSettings = () => settingsModal.classList.remove("hidden");
   const closeSettings = () => settingsModal.classList.add("hidden");
-  el("settingsButton").addEventListener("click", openSettings);
-  el("closeSettings").addEventListener("click", closeSettings);
+  const adminJson = el("adminConfigJson");
+  const loadAdminJson = async () => {
+    if (!adminJson) return;
+    try {
+      const cfg = await fetchAdminConfig();
+      if (!cfg) {
+        adminJson.value = "// Nicht eingeloggt — bitte erst Login.";
+        return;
+      }
+      adminJson.value = JSON.stringify(cfg, null, 2);
+    } catch (e) {
+      adminJson.value = `// Fehler: ${e.message}`;
+    }
+  };
+  if (el("adminLoadJson")) el("adminLoadJson").addEventListener("click", loadAdminJson);
+  if (el("adminSaveJson"))
+    el("adminSaveJson").addEventListener("click", async () => {
+      if (!adminJson) return;
+      try {
+        const cfg = JSON.parse(adminJson.value);
+        await saveAdminConfig(cfg);
+        alert("Admin-Konfiguration gespeichert.");
+        loadAdminJson();
+      } catch (e) {
+        alert(`Ungültiges JSON oder Fehler: ${e.message}`);
+      }
+    });
+  // Beim Öffnen des Settings-Modals aktuelle Admin-Konfiguration laden
   settingsModal.addEventListener("click", (e) => {
     if (e.target === settingsModal) closeSettings();
   });
+  el("settingsButton").addEventListener("click", () => {
+    openSettings();
+    loadAdminJson();
+  });
+  el("closeSettings").addEventListener("click", closeSettings);
 
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
