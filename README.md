@@ -31,9 +31,23 @@ Umgebungsvariablen (optional in `.env`):
 HAI_ADMIN_USER=admin
 HAI_ADMIN_PASSWORD=changeme
 HAI_ADMIN_TOKEN=
+
+# Standard-Chat-Provider (OpenAI-kompatibel, z. B. OpenRouter)
 HAI_CHAT_API_KEY=
+HAI_DEFAULT_CHAT_BASE_URL=https://openrouter.ai/api/v1
+HAI_DEFAULT_CHAT_MODEL=openai/gpt-4o-mini
+HAI_DEFAULT_CHAT_NAME=OpenRouter
+
+# Bildgenerierung (optional)
 HAI_IMAGE_API_KEY=
+HAI_DEFAULT_IMAGE_BASE_URL=
+HAI_DEFAULT_IMAGE_NAME=
+
+# MCP-Integration (optional)
 HAI_MCP_API_KEY=
+HAI_MCP_ENABLED=false
+HAI_MCP_BASE_URL=
+HAI_MCP_TOKEN=
 ```
 
 ## Deployment mit GHCR + Portainer
@@ -47,12 +61,10 @@ HAI_MCP_API_KEY=
 
 ### Workflows
 
-- **Auto‑Build** (`.github/workflows/auto-build-ghcr.yml`):
-  - Trigger: `push` auf `main`
-  - Baut und pusht automatisch nach GHCR.
-- **Manueller Build** (`.github/workflows/manual-build-ghcr.yml`):
-  - Trigger: `workflow_dispatch` (Button in GitHub Actions)
-  - Ermö¿¿¹glicht manuelles Auslö¿¿¹sen des Builds mit Parametern.
+- **Build & Push** (`.github/workflows/build-ghcr.yml`):
+  - Trigger: `push` auf `main` **oder** manuell über `workflow_dispatch` (Button in GitHub Actions)
+  - Beim manuellen Start kann optional ein `image_tag` angegeben werden (leer = `latest`)
+  - Baut und pusht automatisch `latest` + Commit-SHA nach GHCR
 
 ### Portainer (Stack via Git)
 
@@ -95,6 +107,13 @@ services:
 - Konfigurationsdatei: `/data/config.json`
 - Wird über die Settings‑UI im Browser verwaltet.
 - Daten (Chats, Uploads etc.) landen ebenfalls unter `/data`.
+
+## Mehrere Provider
+
+- Der Chat ist über beliebige OpenAI‑kompatible APIs nutzbar.
+- Die Standard‑Provider lassen sich per Umgebungsvariablen setzen (`HAI_DEFAULT_CHAT_*`, `HAI_DEFAULT_IMAGE_*`).
+- In der Settings‑UI können weitere Provider/Modelle hinterlegt und pro Chat gewechselt werden.
+- Die MCP‑Integration wird über `HAI_MCP_ENABLED` aktiviert (Basis‑URL und Token über `HAI_MCP_BASE_URL` / `HAI_MCP_TOKEN`).
 
 ## Sicherheitshinweis
 
