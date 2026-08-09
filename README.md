@@ -50,6 +50,25 @@ HAI_MCP_BASE_URL=
 HAI_MCP_TOKEN=
 ```
 
+### GitHub Secrets (für den CI/CD-Build)
+
+Die folgenden Secrets müssen in den Repository Settings unter
+**Settings → Secrets and variables → Actions** angelegt werden. Sie werden beim
+Docker-Build als `build-args` übergeben und zur Laufzeit als `ENV` im Image abgelegt.
+
+| Secret          | Beispielwert                                | Zweck                                    |
+|-----------------|---------------------------------------------|------------------------------------------|
+| `ADMIN_TOKEN`   | `sk-admin-9f3a...`                          | Admin-Token für die Container-App        |
+| `MCP_API_KEY`   | `sk-mcp-2c8b...`                            | API-Key für die MCP-Integration          |
+
+*Hinweis: `DOCKER_REGISTRY` wird nur als `build-arg` in GitHub Actions verwendet und muss nicht als Secret in den Container injiziert werden.*
+
+Beispielwerte für `.env` (Laufzeit):
+```env
+ADMIN_TOKEN=sk-admin-9f3a...
+MCP_API_KEY=sk-mcp-2c8b...
+```
+
 ## Deployment mit GHCR + Portainer
 
 ### Überblick
