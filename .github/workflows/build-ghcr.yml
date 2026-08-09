@@ -21,6 +21,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -45,3 +46,7 @@ jobs:
           tags: |
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.image_tag || 'latest' }}
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+          build-args: |
+            ADMIN_TOKEN=${{ secrets.ADMIN_TOKEN }}
+            MCP_API_KEY=${{ secrets.MCP_API_KEY }}
+            DOCKER_REGISTRY=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}

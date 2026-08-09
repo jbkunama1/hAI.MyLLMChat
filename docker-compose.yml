@@ -9,7 +9,7 @@ services:
     environment:
       - HAI_ADMIN_USER=${HAI_ADMIN_USER:-admin}
       - HAI_ADMIN_PASSWORD=${HAI_ADMIN_PASSWORD:-changeme}
-      - HAI_ADMIN_TOKEN=${HAI_ADMIN_TOKEN:-}
+      - HAI_ADMIN_TOKEN=${ADMIN_TOKEN:-}
       # Chat API (wird intern als HAI_DEFAULT_CHAT_API_KEY gelesen)
       - HAI_CHAT_API_KEY=${HAI_CHAT_API_KEY:-}
       - HAI_DEFAULT_CHAT_API_KEY=${HAI_CHAT_API_KEY:-}
@@ -22,7 +22,7 @@ services:
       - HAI_DEFAULT_IMAGE_BASE_URL=${HAI_DEFAULT_IMAGE_BASE_URL:-}
       - HAI_DEFAULT_IMAGE_NAME=${HAI_DEFAULT_IMAGE_NAME:-}
       # MCP
-      - HAI_MCP_API_KEY=${HAI_MCP_API_KEY:-}
+      - HAI_MCP_API_KEY=${MCP_API_KEY:-}
       - HAI_MCP_ENABLED=${HAI_MCP_ENABLED:-false}
       - HAI_MCP_BASE_URL=${HAI_MCP_BASE_URL:-}
       - HAI_MCP_TOKEN=${HAI_MCP_TOKEN:-}
