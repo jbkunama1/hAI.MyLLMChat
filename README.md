@@ -60,13 +60,13 @@ Docker-Build als `build-args` übergeben und zur Laufzeit als `ENV` im Image abg
 |-----------------|---------------------------------------------|------------------------------------------|
 | `ADMIN_TOKEN`   | `sk-admin-9f3a...`                          | Admin-Token für die Container-App        |
 | `MCP_API_KEY`   | `sk-mcp-2c8b...`                            | API-Key für die MCP-Integration          |
-| `DOCKER_REGISTRY` | `ghcr.io/jbkunama1`                       | Ziel-Registry für den Image-Push         |
 
-Beispielwerte als `.env`-Vorlage (lokal / Portainer):
+*Hinweis: `DOCKER_REGISTRY` wird nur als `build-arg` in GitHub Actions verwendet und muss nicht als Secret in den Container injiziert werden.*
+
+Beispielwerte für `.env` (Laufzeit):
 ```env
 ADMIN_TOKEN=sk-admin-9f3a...
 MCP_API_KEY=sk-mcp-2c8b...
-DOCKER_REGISTRY=ghcr.io/jbkunama1
 ```
 
 ## Deployment mit GHCR + Portainer
