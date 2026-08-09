@@ -179,14 +179,22 @@
         </div>
 
         <div class="tab-panel" id="tab-admin">
-          <label class="field">
-            <span>JSON-Konfiguration (Provider, Modelle, MCP-Server)</span>
-            <textarea id="adminConfigJson" rows="16" class="composer-input" spellcheck="false"
-              placeholder='{"providers": [], "models": [], "mcp_servers": []}'></textarea>
-          </label>
-          <div class="provider-actions">
-            <button type="button" id="adminLoadJson" class="ghost-btn">Neu laden</button>
-            <button type="button" id="adminSaveJson" class="primary-btn">Admin-Konfiguration speichern</button>
+          <p class="hint">Verwaltung von Providern, Modellen und MCP-Servern. Pflichtfelder sind mit * markiert.</p>
+
+          <h3 class="admin-section-title">Provider</h3>
+          <div id="adminProviders"></div>
+          <button type="button" id="adminAddProvider" class="ghost-btn" style="margin-top:0.4rem;">+ Provider hinzufügen</button>
+
+          <h3 class="admin-section-title">Modelle</h3>
+          <div id="adminModels"></div>
+          <button type="button" id="adminAddModel" class="ghost-btn" style="margin-top:0.4rem;">+ Modell hinzufügen</button>
+
+          <h3 class="admin-section-title">MCP-Server</h3>
+          <div id="adminMcpServers"></div>
+          <button type="button" id="adminAddMcp" class="ghost-btn" style="margin-top:0.4rem;">+ MCP-Server hinzufügen</button>
+
+          <div class="provider-actions" style="margin-top:1rem;">
+            <button type="button" id="adminSaveForm" class="primary-btn">Admin-Konfiguration speichern</button>
           </div>
           <p class="hint">
             Benötigt Admin-Login. API-Keys werden hier unverschlüsselt in <code>/data/config.json</code> gespeichert.

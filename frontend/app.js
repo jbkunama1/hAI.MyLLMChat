@@ -488,6 +488,76 @@ function collectProviderDrafts() {
   }));
 }
 
+// --- Admin-Tab: Formular für Provider/Modelle/MCP-Server ---
+const ADMIN_PROVIDER_FIELDS = [
+  { k: "name", label: "Name *", required: true, ph: "z.B. OpenRouter" },
+  { k: "base_url", label: "Base URL *", required: true, ph: "https://.../v1" },
+  { k: "api_key", label: "API-Key", type: "password", ph: "sk-…" },
+];
+const ADMIN_MODEL_FIELDS = [{ k: "name", label: "Name *", required: true, ph: "z.B. gpt-4o" }];
+const ADMIN_MCP_FIELDS = [
+  { k: "name", label: "Name *", required: true, ph: "z.B. mcpo" },
+  { k: "url", label: "URL *", required: true, ph: "http://mcpo:8000" },
+  { k: "api_key", label: "API-Key", type: "password", ph: "…" },
+];
+
+function renderAdminList(listId, items, fieldDefs, opts = {}) {
+  const box = el(listId);
+  if (!box) return;
+  box.innerHTML = "";
+  items.forEach((item, i) => {
+    const card = document.createElement("div");
+    card.className = "provider-card";
+    let rows = fieldDefs
+      .map(
+        (f) => `
+      <div class="provider-row"><label style="flex:1;min-width:0;">${f.label}
+        <input id="${listId}-f${i}-${f.k}" type="${f.type || "text"}" value="${escapeHtml(item[f.k] || "")}" placeholder="${f.ph || ""}" ${f.required ? "required" : ""} />
+      </label></div>`
+      )
+      .join("");
+    if (opts.models)
+      rows += `
+      <div class="provider-row"><label style="flex:1;min-width:0;">Modelle (kommagetrennt)
+        <input id="${listId}-f${i}-models" type="text" value="${escapeHtml((item.models || []).join(", "))}" placeholder="gpt-4o, claude-3" />
+      </label></div>`;
+    if (opts.selected)
+      rows += `
+      <div class="provider-row"><label class="checkbox-field">
+        <input id="${listId}-f${i}-selected" type="checkbox" ${item.selected ? "checked" : ""} />
+        <span>Standard-Anbieter</span>
+      </label></div>`;
+    rows += `
+      <div class="provider-actions">
+        <button type="button" class="ghost-btn" data-remove>Entfernen</button>
+      </div>`;
+    card.innerHTML = rows;
+    card.querySelector("[data-remove]").addEventListener("click", () => {
+      items.splice(i, 1);
+      renderAdminList(listId, items, fieldDefs, opts);
+    });
+    box.appendChild(card);
+  });
+}
+
+function collectAdminList(listId, items, fieldDefs, opts = {}) {
+  return items.map((item, i) => {
+    const out = { id: item.id };
+    fieldDefs.forEach((f) => {
+      const v = (el(`${listId}-f${i}-${f.k}`)?.value || "").trim();
+      if (f.required && !v) throw new Error(`${f.label} (Zeile ${i + 1}) fehlt.`);
+      out[f.k] = v;
+    });
+    if (opts.models)
+      out.models = (el(`${listId}-f${i}-models`)?.value || "")
+        .split(",")
+        .map((m) => m.trim())
+        .filter(Boolean);
+    if (opts.selected) out.selected = !!el(`${listId}-f${i}-selected`)?.checked;
+    return out;
+  });
+}
+
 // Sidebar-Events
 const setupSidebar = () => {
   const sidebar = el("sidebar");
@@ -769,44 +839,74 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // Admin-Tab: JSON-Konfiguration laden/speichern
+  // Admin-Tab: Formular für Provider/Modelle/MCP-Server
   const settingsModal = el("settingsModal");
   const openSettings = () => settingsModal.classList.remove("hidden");
   const closeSettings = () => settingsModal.classList.add("hidden");
-  const adminJson = el("adminConfigJson");
-  const loadAdminJson = async () => {
-    if (!adminJson) return;
+  const adminState = { providers: [], models: [], mcp_servers: [] };
+
+  const renderAdminForm = () => {
+    renderAdminList("adminProviders", adminState.providers, ADMIN_PROVIDER_FIELDS, {
+      models: true,
+      selected: true,
+    });
+    renderAdminList("adminModels", adminState.models, ADMIN_MODEL_FIELDS);
+    renderAdminList("adminMcpServers", adminState.mcp_servers, ADMIN_MCP_FIELDS);
+  };
+
+  const loadAdminForm = async () => {
     try {
       const cfg = await fetchAdminConfig();
       if (!cfg) {
-        adminJson.value = "// Nicht eingeloggt — bitte erst Login.";
+        alert("Nicht eingeloggt — bitte erst Login.");
         return;
       }
-      adminJson.value = JSON.stringify(cfg, null, 2);
+      adminState.providers = cfg.providers || [];
+      adminState.models = cfg.models || [];
+      adminState.mcp_servers = cfg.mcp_servers || [];
+      renderAdminForm();
     } catch (e) {
-      adminJson.value = `// Fehler: ${e.message}`;
+      alert("Admin-Konfiguration konnte nicht geladen werden: " + e.message);
     }
   };
-  if (el("adminLoadJson")) el("adminLoadJson").addEventListener("click", loadAdminJson);
-  if (el("adminSaveJson"))
-    el("adminSaveJson").addEventListener("click", async () => {
-      if (!adminJson) return;
-      try {
-        const cfg = JSON.parse(adminJson.value);
-        await saveAdminConfig(cfg);
-        alert("Admin-Konfiguration gespeichert.");
-        loadAdminJson();
-      } catch (e) {
-        alert(`Ungültiges JSON oder Fehler: ${e.message}`);
-      }
-    });
+
+  el("adminAddProvider").addEventListener("click", () => {
+    adminState.providers.push({});
+    renderAdminForm();
+  });
+  el("adminAddModel").addEventListener("click", () => {
+    adminState.models.push({});
+    renderAdminForm();
+  });
+  el("adminAddMcp").addEventListener("click", () => {
+    adminState.mcp_servers.push({});
+    renderAdminForm();
+  });
+
+  el("adminSaveForm").addEventListener("click", async () => {
+    try {
+      const cfg = {
+        providers: collectAdminList("adminProviders", adminState.providers, ADMIN_PROVIDER_FIELDS, {
+          models: true,
+          selected: true,
+        }),
+        models: collectAdminList("adminModels", adminState.models, ADMIN_MODEL_FIELDS),
+        mcp_servers: collectAdminList("adminMcpServers", adminState.mcp_servers, ADMIN_MCP_FIELDS),
+      };
+      await saveAdminConfig(cfg);
+      alert("Admin-Konfiguration gespeichert.");
+      await loadAdminForm();
+    } catch (e) {
+      alert(`Fehler beim Speichern: ${e.message}`);
+    }
+  });
   // Beim Öffnen des Settings-Modals aktuelle Admin-Konfiguration laden
   settingsModal.addEventListener("click", (e) => {
     if (e.target === settingsModal) closeSettings();
   });
   el("settingsButton").addEventListener("click", () => {
     openSettings();
-    loadAdminJson();
+    loadAdminForm();
   });
   el("closeSettings").addEventListener("click", closeSettings);
 

@@ -520,6 +520,17 @@ body {
   color: var(--text-muted);
   padding: 0.4rem 0;
 }
+.admin-section-title {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+}
+.admin-section-title:first-of-type {
+  margin-top: 0.6rem;
+}
 .provider-card {
   display: flex;
   flex-direction: column;
@@ -546,7 +557,8 @@ body {
   align-items: center;
   gap: 0.4rem;
 }
-.provider-card input[type="text"] {
+.provider-card input[type="text"],
+.provider-card input[type="password"] {
   flex: 1;
   min-width: 0;
   background: var(--bg-elevated);
@@ -557,7 +569,8 @@ body {
   font-family: inherit;
   font-size: 0.8rem;
 }
-.provider-card input[type="text"]:focus {
+.provider-card input[type="text"]:focus,
+.provider-card input[type="password"]:focus {
   outline: none;
   border-color: var(--accent);
 }
