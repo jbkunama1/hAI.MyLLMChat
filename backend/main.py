@@ -494,6 +494,27 @@ async def get_chats():
         conn.close()
 
 
+@app.get("/api/history/search")
+async def search_history(q: str = Query(..., min_length=1)):
+    """Volltextsuche über alle Chat-Nachrichten (LIKE-Suche)."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT m.id, m.chat_id, c.name AS chat_name, m.role, m.content, m.created_at
+            FROM messages m JOIN chats c ON c.id = m.chat_id
+            WHERE m.content LIKE ?
+            ORDER BY m.created_at DESC
+            LIMIT 100
+            """,
+            (f"%{q}%",),
+        )
+        return [dict(row) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
 # ---------- Image-Endpoint (OpenAI-kompatibel) ----------
 
 @app.post("/api/image", response_model=ImageResponse)

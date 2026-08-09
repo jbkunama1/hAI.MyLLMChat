@@ -139,6 +139,55 @@ async function fetchChats() {
   }
 }
 
+// --- Chat-Verlauf-Suche ---
+let searchTimer = null;
+
+function renderSearchResults(results, list) {
+  list.innerHTML = "";
+  if (!results.length) {
+    list.innerHTML = `<div class="conversation-item"><span class="conv-title">Keine Treffer</span></div>`;
+    return;
+  }
+  results.forEach((r) => {
+    const item = document.createElement("div");
+    item.className = "conversation-item search-result";
+    const snippet = r.content.length > 80 ? r.content.slice(0, 80) + "…" : r.content;
+    item.innerHTML = `
+      <span class="conv-title">${escapeHtml(r.chat_name || "Chat #" + r.chat_id)}</span>
+      <span class="conv-snippet">${escapeHtml(snippet)}</span>`;
+    item.addEventListener("click", async () => {
+      currentChatId = r.chat_id;
+      await loadChatHistory(currentChatId);
+      await renderChatList();
+    });
+    list.appendChild(item);
+  });
+}
+
+async function searchHistory(query) {
+  const list = el("conversationList");
+  if (!query.trim()) {
+    await renderChatList();
+    return;
+  }
+  try {
+    const res = await fetch(`/api/history/search?q=${encodeURIComponent(query.trim())}`);
+    if (!res.ok) return;
+    renderSearchResults(await res.json(), list);
+  } catch (e) {
+    console.error("Search error:", e);
+  }
+}
+
+function setupHistorySearch() {
+  const input = el("historySearch");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => searchHistory(input.value), 300);
+  });
+}
+
 async function updateConfigOnServer(newCfg) {
   if (!adminToken) throw new Error("Nicht eingeloggt.");
   const res = await fetch("/api/config/update", {
@@ -598,6 +647,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadThemeAndMode();
   setupSidebar();
   setupDesignListeners();
+  setupHistorySearch();
 
   // New chat button
   el("newChatButton").addEventListener("click", createNewChat);
