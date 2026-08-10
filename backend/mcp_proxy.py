@@ -2,7 +2,6 @@
 from typing import Any, Dict, List, Optional
 
 import httpx
-from typing import Any, Dict, List, Optional
 
 from backend.config_store import load_config
 
@@ -100,70 +99,3 @@ async def proxy_request(name: str, path: str, method: str, body: Any) -> Dict[st
     except Exception:
         return {"raw": resp.text}
 
-
-def _server_headers(server: Dict[str, Any]) -> Dict[str, str]:
-    headers = {"Content-Type": "application/json"}
-    if server.get("api_key"):
-        headers["Authorization"] = f"Bearer {server['api_key']}"
-    return headers
-
-
-async def fetch_server_tools(server: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Fragt die Tool-Liste eines MCP-Servers ab (GET {url}/tools).
-
-    Akzeptiert sowohl {'tools': [...]} als auch eine nackte JSON-Liste.
-    """
-    url = server["url"].rstrip("/") + "/tools"
-    try:
-        async with httpx.AsyncClient(timeout=MCP_TIMEOUT) as client:
-            resp = await client.get(url, headers=_server_headers(server))
-        if resp.status_code >= 400:
-            return []
-        data = resp.json()
-    except Exception:
-        return []
-    if isinstance(data, list):
-        return data
-    if isinstance(data, dict) and isinstance(data.get("tools"), list):
-        return data["tools"]
-    return []
-
-
-async def fetch_all_server_tools() -> Dict[str, List[Dict[str, Any]]]:
-    """Liefert {server_name: [tools...]} über alle konfigurierten MCP-Server."""
-    result: Dict[str, List[Dict[str, Any]]] = {}
-    for server in get_mcp_servers():
-        name = server.get("name") or server.get("id") or server.get("url")
-        result[name] = await fetch_server_tools(server)
-    return result
-
-
-async def proxy_request(name: str, path: str, method: str, body: Any) -> Dict[str, Any]:
-    """Leitet method+path an den MCP-Server 'name' weiter und gibt dessen JSON zurück."""
-    server = find_server(name)
-    if not server:
-        raise LookupError(f"MCP-Server '{name}' nicht konfiguriert")
-
-    url = server["url"].rstrip("/") + "/" + path.lstrip("/")
-    headers = _server_headers(server)
-
-    async with httpx.AsyncClient(timeout=MCP_TIMEOUT) as client:
-        resp = await client.request(method, url, json=body or {}, headers=headers)
-
-    if resp.status_code >= 400:
-        raise RuntimeError(f"MCP-Upstream {name}: {resp.status_code} {resp.text[:200]}")
-
-    try:
-        return resp.json()
-    except Exception:
-        return {"raw": resp.text}
-
-
-async def call_tool(server_name: str, tool_name: str, arguments: Dict[str, Any]) -> Any:
-    """Führt einen Tool-Call auf einem MCP-Server aus."""
-    return await proxy_request(
-        server_name,
-        path="/tools/call",
-        method="POST",
-        body={"name": tool_name, "arguments": arguments or {}},
-    )
