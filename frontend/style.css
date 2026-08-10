@@ -57,6 +57,37 @@
   --accent-hover: #94a3b8;
   --accent-soft: rgba(100, 116, 139, 0.18);
 }
+/* Modern & Retro extensions */
+[data-theme="sunset"] {
+  --accent: #ff4500;
+  --accent-hover: #ff6347;
+  --accent-soft: rgba(255,69,0,0.15);
+}
+[data-theme="ocean"] {
+  --accent: #1e90ff;
+  --accent-hover: #63b3ed;
+  --accent-soft: rgba(30,144,255,0.15);
+}
+[data-theme="violet"] {
+  --accent: #8a2be2;
+  --accent-hover: #9370db;
+  --accent-soft: rgba(138,43,226,0.15);
+}
+[data-theme="amber"] {
+  --accent: #ffbf00;
+  --accent-hover: #ffcc33;
+  --accent-soft: rgba(255,191,0,0.15);
+  background: #1a1a1a; /* dark background */
+  color: #ffbf00;
+}
+[data-theme="matrix"] {
+  --accent: #00ff00;
+  --accent-hover: #66ff66;
+  --accent-soft: rgba(0,255,0,0.15);
+  background: #000000;
+  color: #00ff00;
+  font-family: "JetBrains Mono", monospace;
+}
 
 /* Scrollbar-Styles (theme-adaptiv) */
 * {

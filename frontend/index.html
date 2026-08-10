@@ -63,12 +63,21 @@
             <option value="">Lädt…</option>
           </select>
           <label class="model-label">Modell</label>
-          <select id="modelSelect" class="model-select">
-            <option value="">Lädt…</option>
-          </select>
+          <div class="model-select-refresh">
+            <select id="modelSelect" class="model-select">
+              <option value="">Lädt…</option>
+            </select>
+            <button id="refreshModels" class="icon-button mini" title="Modelle aktualisieren">🔄</button>
+          </div>
         </div>
           <div class="top-bar-right">
-            <span class="pill" id="mcpPill">MCP: –</span>
+            <div id="mcpControls" class="mcp-controls">
+              <span class="pill clickable" id="mcpPill">MCP: –</span>
+              <div id="mcpToolsPanel" class="mcp-tools-panel hidden">
+                <header>MCP Tools</header>
+                <div id="mcpToolsList">Lädt Tools…</div>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -214,10 +223,14 @@
           <p class="hint" style="margin-top:0.8rem;">Farbschema:</p>
           <div class="theme-grid">
             <div class="theme-swatch" data-theme="indigo" title="Indigo"></div>
-            <div class="theme-swatch" data-theme="orange" title="Orange"></div>
+            <div class="theme-swatch" data-theme="sunset" title="Sunset"></div>
+            <div class="theme-swatch" data-theme="ocean" title="Ocean"></div>
+            <div class="theme-swatch" data-theme="violet" title="Violet"></div>
             <div class="theme-swatch" data-theme="emerald" title="Emerald"></div>
             <div class="theme-swatch" data-theme="rose" title="Rose"></div>
             <div class="theme-swatch" data-theme="slate" title="Slate"></div>
+            <div class="theme-swatch" data-theme="amber" title="Retro Amber"></div>
+            <div class="theme-swatch" data-theme="matrix" title="Retro Green"></div>
           </div>
 
           <p class="hint" style="margin-top:0.8rem;">Hintergrund:</p>

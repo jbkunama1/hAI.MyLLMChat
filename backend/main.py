@@ -18,7 +18,12 @@ from backend.config_store import (
     ModelConfig,
     McpServerConfig,
 )
-from backend.mcp_proxy import get_mcp_servers, proxy_request
+from backend.mcp_proxy import (
+    get_mcp_servers,
+    proxy_request,
+    fetch_all_server_tools,
+    call_tool,
+)
 
 app = FastAPI()
 
@@ -112,6 +117,7 @@ class ChatRequest(BaseModel):
     model: str | None = None
     temperature: float | None = 0.7
     chat_id: int | None = None  # optional chat ID
+    tools: List[Dict[str, Any]] | None = None  # OpenAI-Tool-Definitionen (MCP)
 
 
 class ChatResponse(BaseModel):
@@ -261,11 +267,16 @@ async def list_models():
     """
     cfg = load_config()
     provider = get_selected_provider()
+    
+    # Wenn ein Provider ausgewählt ist und er Modelle hat, diese zurückgeben
     if provider and provider.get("models"):
         return {"models": provider["models"]}
+    
+    # Fallback auf das im Chat konfigurierte Modell
     model = cfg.get("chat", {}).get("model")
     if model:
         return {"models": [model]}
+    
     return {"models": []}
 
 
@@ -333,7 +344,50 @@ async def select_provider(req: Optional[Dict[str, Any]] = Body(None)):
     return {"status": "ok", "provider_id": provider_id}
 
 
-# ---------- File Upload ----------
+    @app.post("/api/providers/refresh-models")
+    async def refresh_provider_models():
+        """Fragt die Modellliste des aktiven Providers ab (GET {base_url}/models) und speichert sie."""
+        cfg = load_config()
+        provider = get_selected_provider()
+        backend = get_chat_backend()
+
+        base_url = (provider or {}).get("base_url") or backend.get("base_url")
+        api_key = (provider or {}).get("api_key") or backend.get("api_key")
+        if not base_url:
+            raise HTTPException(status_code=400, detail="Kein aktiver Provider / kein Chat-Backend konfiguriert.")
+
+        url = base_url.rstrip("/") + "/models"
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"Bearer {api_key}"
+
+        try:
+            async with httpx.AsyncClient(timeout=60) as client:
+                resp = await client.get(url, headers=headers)
+        except httpx.RequestError:
+            raise HTTPException(status_code=502, detail="Modell-Endpoint des Providers nicht erreichbar.")
+
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=502, detail=f"Provider antwortete mit {resp.status_code}.")
+
+        try:
+            data = resp.json()
+        except Exception:
+            raise HTTPException(status_code=502, detail="Unerwartetes Format der Modellliste.")
+
+        if isinstance(data, dict) and isinstance(data.get("data"), list):
+            models = [m.get("id") for m in data["data"] if isinstance(m, dict) and m.get("id")]
+            models = sorted(dict.fromkeys(str(m) for m in models))
+        else:
+            raise HTTPException(status_code=502, detail="Keine 'data[].id'-Modellliste empfangen.")
+
+        if provider:
+            provider["models"] = models
+            save_config(cfg)
+        return {"models": models}
+
+
+    # ---------- File Upload ----------
 
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...)):
@@ -431,22 +485,67 @@ async def chat(req: ChatRequest):
             "messages": history_for_llm,
             "temperature": req.temperature,
             "stream": False,
+            "tools": req.tools, # Hinzugefügt für Tool-Support
         }
 
         headers = {"Content-Type": "application/json"}
         if backend["api_key"]:
             headers["Authorization"] = f"Bearer {backend['api_key']}"
 
-        try:
-            async with httpx.AsyncClient(timeout=60) as client:
-                resp = await client.post(url, json=payload, headers=headers)
-            if resp.status_code != 200:
-                print("Upstream error:", resp.status_code, resp.text)
-                raise HTTPException(status_code=502, detail=f"Upstream-Fehler: {resp.status_code}")
-            data = resp.json()
-        except httpx.RequestError as e:
-            print("HTTP error:", e)
-            raise HTTPException(status_code=502, detail="Chat-Backend nicht erreichbar.")
+        MAX_TOOL_CALL_ITERATIONS = 3
+        for _ in range(MAX_TOOL_CALL_ITERATIONS):
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code != 200:
+                    print("Upstream error:", resp.status_code, resp.text)
+                    raise HTTPException(status_code=502, detail=f"Upstream-Fehler: {resp.status_code}")
+                data = resp.json()
+            except httpx.RequestError as e:
+                print("HTTP error:", e)
+                raise HTTPException(status_code=502, detail="Chat-Backend nicht erreichbar.")
+
+            # Check for tool_calls in the response
+            tool_calls = data.get("choices", [])[0].get("message", {}).get("tool_calls")
+            if not tool_calls:
+                # No tool calls, break the loop and process as a normal message
+                break
+
+            # Process tool calls
+            tool_responses = []
+            for tc in tool_calls:
+                function_name = tc["function"]["name"]
+                arguments = tc["function"]["arguments"]
+
+                # Determine which MCP server/tool to call
+                # Tool names are expected in format 'server_name__tool_name'
+                if "__" not in function_name:
+                    print(f"Invalid tool name format: {function_name}")
+                    tool_responses.append({
+                        "tool_call_id": tc["id"],
+                        "output": f"Error: Invalid tool format. Expected server__tool: {function_name}"
+                    })
+                    continue
+
+                server_name, tool_name = function_name.split("__", 1)
+                print(f"Calling tool {tool_name} on server {server_name} with args {arguments}")
+                try:
+                    output = await call_tool(server_name, tool_name, arguments)
+                    tool_responses.append({
+                        "tool_call_id": tc["id"],
+                        "output": output
+                    })
+                except (LookupError, RuntimeError) as e:
+                    print(f"Tool call error: {e}")
+                    tool_responses.append({
+                        "tool_call_id": tc["id"],
+                        "output": f"Error calling tool {function_name}: {str(e)}"
+                    })
+
+            # Add tool_responses to history and continue loop
+            history_for_llm.append(data["choices"][0]["message"])
+            history_for_llm.append({"role": "tool", "tool_calls": tool_calls, "content": tool_responses})
+            payload["messages"] = history_for_llm
 
         try:
             content = data["choices"][0]["message"]["content"]
@@ -561,10 +660,15 @@ async def generate_image(req: ImageRequest):
 
 @app.get("/api/mcp/tools")
 async def list_mcp_tools():
-    mcp = get_mcp_config()
-    if not mcp["enabled"] or not mcp["base_url"]:
-        return {"enabled": False, "tools": []}
-    return {"enabled": True, "tools": []}
+    """Aggregiert die Tool-Listen aller konfigurierten MCP-Server."""
+    servers = fetch_all_server_tools()
+    return {
+        "enabled": bool(servers),
+        "servers": [
+            {"name": name, "tools": tools}
+            for name, tools in servers.items()
+        ],
+    }
 
 
 # ---------- MCP-Proxy-Endpoints ----------

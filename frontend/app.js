@@ -5,7 +5,7 @@ let history = [];
 let attachments = [];
 let mode = "chat"; // "chat" | "image"
 
-const THEMES = ["indigo", "orange", "emerald", "rose", "slate"];
+const THEMES = ["indigo", "sunset", "ocean", "violet", "emerald", "rose", "slate", "amber", "matrix"];
 const el = (id) => document.getElementById(id);
 
 function loadAdminToken() {
@@ -188,6 +188,100 @@ function setupHistorySearch() {
   });
 }
 
+// --- MCP Tools Panel ---
+let mcpSelectedTools = {}; // { "server__tool": { name, description, params } }
+
+function buildToolPayload(selected) {
+  // Convert selected tool entries into OpenAI tool schema definitions
+  return Object.values(selected).map((t) => ({
+    type: "function",
+    function: {
+      name: t.qualified,            // "server__toolname"
+      description: t.description || "",
+      parameters: t.params || { type: "object", properties: {} },
+    },
+  }));
+}
+
+async function loadMcpTools() {
+  const list = el("mcpToolsList");
+  const pill = el("mcpPill");
+  if (!list || !pill) return;
+  try {
+    const res = await fetch("/api/mcp/tools");
+    if (!res.ok) {
+      pill.textContent = "MCP: Fehler";
+      return;
+    }
+    const data = await res.json();
+    const servers = data.servers || [];
+    if (!servers.length) {
+      pill.textContent = "MCP: –";
+      list.innerHTML = `<div class="mcp-tools-empty">Keine MCP-Server konfiguriert.</div>`;
+      return;
+    }
+    const toolCount = servers.reduce((n, s) => n + (s.tools || []).length, 0);
+    pill.textContent = `MCP: ${servers.length} (${toolCount} Tools)`;
+    list.innerHTML = "";
+    servers.forEach((s) => {
+      const group = document.createElement("div");
+      group.className = "mcp-server-group";
+      const tools = s.tools || [];
+      group.innerHTML = `<div class="mcp-server-name">${escapeHtml(s.name)}</div>`;
+      tools.forEach((tool) => {
+        const qualified = `${s.name}__${tool.name}`;
+        const label = document.createElement("label");
+        label.className = "mcp-tool-item";
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!mcpSelectedTools[qualified];
+        const desc = tool.description ? ` — ${tool.description}` : "";
+        label.appendChild(cb);
+        const span = document.createElement("span");
+        span.textContent = tool.name + (desc || "");
+        label.appendChild(span);
+        cb.addEventListener("change", () => {
+          if (cb.checked) {
+            mcpSelectedTools[qualified] = {
+              qualified,
+              name: tool.name,
+              description: tool.description || "",
+              params: tool.inputSchema || { type: "object", properties: {} },
+            };
+          } else {
+            delete mcpSelectedTools[qualified];
+          }
+        });
+        group.appendChild(label);
+      });
+      list.appendChild(group);
+    });
+  } catch (e) {
+    pill.textContent = "MCP: Fehler";
+    console.error("MCP tools error:", e);
+  }
+}
+
+function setupMcpControls() {
+  const pill = el("mcpPill");
+  const panel = el("mcpToolsPanel");
+  if (!pill || !panel) return;
+  pill.addEventListener("click", async () => {
+    const willOpen = panel.classList.contains("hidden");
+    if (willOpen && !panel.dataset.loaded) {
+      await loadMcpTools();
+      panel.dataset.loaded = "1";
+    }
+    panel.classList.toggle("hidden", !willOpen);
+  });
+  document.addEventListener("click", (e) => {
+    if (!panel.classList.contains("hidden") &&
+        !panel.contains(e.target) && !pill.contains(e.target)) {
+      panel.classList.add("hidden");
+    }
+  });
+}
+
 async function updateConfigOnServer(newCfg) {
   if (!adminToken) throw new Error("Nicht eingeloggt.");
   const res = await fetch("/api/config/update", {
@@ -223,6 +317,8 @@ async function sendChatMessage(message, model, chatId) {
   const body = { messages: [message] };
   if (model) body.model = model;
   if (chatId != null) body.chat_id = chatId;
+  const toolPayload = buildToolPayload(mcpSelectedTools);
+  if (toolPayload.length) body.tools = toolPayload;
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -648,6 +744,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   setupSidebar();
   setupDesignListeners();
   setupHistorySearch();
+  setupMcpControls();
 
   // New chat button
   el("newChatButton").addEventListener("click", createNewChat);
@@ -748,6 +845,32 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
       await populateModelSelect();
     });
+    // Refresh-Models-Button
+    const refreshBtn = el("refreshModels");
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", async () => {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "⏳";
+        try {
+          const res = await fetch("/api/providers/refresh-models", { method: "POST" });
+          if (!res.ok) throw new Error(`Refresh-Fehler (${res.status})`);
+          const data = await res.json();
+          select.innerHTML = "";
+          (data.models || []).forEach((m) => {
+            const opt = document.createElement("option");
+            opt.value = m;
+            opt.textContent = m;
+            select.appendChild(opt);
+          });
+        } catch (e) {
+          console.error("Models refresh error:", e);
+          alert("Modelle konnten nicht aktualisiert werden: " + e.message);
+        } finally {
+          refreshBtn.disabled = false;
+          refreshBtn.textContent = "🔄";
+        }
+      });
+    }
     await populateModelSelect();
   } else {
     providerSelect.innerHTML = "";
@@ -882,8 +1005,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         "online",
         config.chat?.name ? `Verbunden: ${config.chat.name}` : "Kein Chat-Backend konfiguriert"
       );
-      el("mcpPill").textContent = "MCP: " + (config.mcp?.enabled ? "aktiv" : "inaktiv");
-      el("mcpPill").style.display = "";
+      loadMcpTools();
     } else {
       setStatus("error", "Backend nicht erreichbar");
     }
