@@ -36,6 +36,8 @@
         <input id="historySearch" type="search" placeholder="Chat-Verlauf durchsuchen…" autocomplete="off" />
       </div>
 
+      <button id="archiveToggle" class="archive-toggle-btn" title="Archivierte Chats anzeigen">🗄️ Archiv anzeigen</button>
+
       <div class="conversation-list" id="conversationList">
         <div class="conversation-item active" data-id="default">
           <span class="conv-title">Aktueller Chat</span>
@@ -71,6 +73,7 @@
           </div>
         </div>
           <div class="top-bar-right">
+            <button id="exportChatButton" class="icon-button mini" title="Chat exportieren (Markdown)">⬇️</button>
             <div id="mcpControls" class="mcp-controls">
               <span class="pill clickable" id="mcpPill">MCP: –</span>
               <div id="mcpToolsPanel" class="mcp-tools-panel hidden">

@@ -83,9 +83,14 @@ def init_db():
             CREATE TABLE IF NOT EXISTS chats (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Migration: archived column for bestehende Datenbanken
+        cols = [r[1] for r in cursor.execute("PRAGMA table_info(chats)").fetchall()]
+        if "archived" not in cols:
+            cursor.execute("ALTER TABLE chats ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -581,14 +586,94 @@ async def get_chat_history(chat_id: int):
 
 
 @app.get("/api/chats")
-async def get_chats():
-    """Get list of all chats (for sidebar)."""
+async def get_chats(archived: bool = False, include_archived: bool = False):
+    """Get list of chats (for sidebar). Standard nur nicht-archivierte Chats;
+    include_archived=true liefert zusätzlich die Archivierten."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, created_at FROM chats ORDER BY created_at DESC")
+        if include_archived:
+            cursor.execute("SELECT id, name, archived, created_at FROM chats ORDER BY archived, created_at DESC")
+        else:
+            cursor.execute("SELECT id, name, archived, created_at FROM chats WHERE archived=? ORDER BY created_at DESC", (1 if archived else 0,))
         chats = cursor.fetchall()
-        return [{"id": row["id"], "name": row["name"], "created_at": row["created_at"]} for row in chats]
+        return [
+            {"id": row["id"], "name": row["name"], "archived": bool(row["archived"]), "created_at": row["created_at"]}
+            for row in chats
+        ]
+    finally:
+        conn.close()
+
+
+@app.post("/api/chat/{chat_id}/rename")
+async def rename_chat(chat_id: int, body: Dict[str, Any] = Body(...)):
+    """Renames an existing chat."""
+    name = (body.get("name") or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Name darf nicht leer sein.")
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM chats WHERE id=?", (chat_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Chat nicht gefunden.")
+        cursor.execute("UPDATE chats SET name=? WHERE id=?", (name[:200], chat_id))
+        conn.commit()
+        return {"status": "ok", "id": chat_id, "name": name[:200]}
+    finally:
+        conn.close()
+
+
+@app.post("/api/chat/{chat_id}/archive")
+async def archive_chat(chat_id: int, body: Optional[Dict[str, Any]] = Body(None)):
+    """Archiviert (archived=true) oder stellt wieder her (archived=false)."""
+    archived = bool(body.get("archived", True)) if isinstance(body, dict) else True
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM chats WHERE id=?", (chat_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Chat nicht gefunden.")
+        cursor.execute("UPDATE chats SET archived=? WHERE id=?", (1 if archived else 0, chat_id))
+        conn.commit()
+        return {"status": "ok", "id": chat_id, "archived": archived}
+    finally:
+        conn.close()
+
+
+@app.get("/api/chat/{chat_id}/export")
+async def export_chat(chat_id: int, format: str = Query(default="markdown")):
+    """Exportiert einen Chat als Markdown oder JSON."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, created_at FROM chats WHERE id=?", (chat_id,))
+        chat = cursor.fetchone()
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat nicht gefunden.")
+        cursor.execute(
+            "SELECT role, content, created_at FROM messages WHERE chat_id=? ORDER BY created_at",
+            (chat_id,),
+        )
+        messages = [dict(row) for row in cursor.fetchall()]
+
+        if format == "json":
+            return {
+                "chat_id": chat["id"],
+                "name": chat["name"],
+                "created_at": chat["created_at"],
+                "messages": messages,
+            }
+
+        # Markdown
+        lines = [f"# {chat['name']}", "", f"_Exportiert: {chat['created_at']}_", ""]
+        for m in messages:
+            who = "**Du**" if m["role"] == "user" else "**Assistant**"
+            lines.append(f"### {who} ({m['created_at']})")
+            lines.append("")
+            lines.append(m["content"])
+            lines.append("")
+        return {"format": "markdown", "content": "\n".join(lines)}
     finally:
         conn.close()
 

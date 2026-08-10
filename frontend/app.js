@@ -4,6 +4,7 @@ let currentChatId = null; // Track current chat ID
 let history = [];
 let attachments = [];
 let mode = "chat"; // "chat" | "image"
+let showArchived = false; // Sidebar: Archiv anzeigen
 
 const THEMES = ["indigo", "sunset", "ocean", "violet", "emerald", "rose", "slate", "amber", "matrix"];
 const el = (id) => document.getElementById(id);
@@ -129,7 +130,7 @@ async function fetchProviders() {
 
 async function fetchChats() {
   try {
-    const res = await fetch("/api/chats");
+    const res = await fetch("/api/chats" + (showArchived ? "?include_archived=true" : ""));
     if (!res.ok) return [];
     const data = await res.json();
     return data || [];
@@ -203,6 +204,8 @@ function buildToolPayload(selected) {
   }));
 }
 
+const WEBSEARCH_HINTS = /search|web|browse|scrape|fetch_url|google|bing|brave/i;
+
 async function loadMcpTools() {
   const list = el("mcpToolsList");
   const pill = el("mcpPill");
@@ -223,6 +226,8 @@ async function loadMcpTools() {
     const toolCount = servers.reduce((n, s) => n + (s.tools || []).length, 0);
     pill.textContent = `MCP: ${servers.length} (${toolCount} Tools)`;
     list.innerHTML = "";
+    // Websearch-Tools automatisch vorauswählen, falls vorhanden
+    let autoSearchPicked = false;
     servers.forEach((s) => {
       const group = document.createElement("div");
       group.className = "mcp-server-group";
@@ -230,15 +235,27 @@ async function loadMcpTools() {
       group.innerHTML = `<div class="mcp-server-name">${escapeHtml(s.name)}</div>`;
       tools.forEach((tool) => {
         const qualified = `${s.name}__${tool.name}`;
+        const isWebsearch = WEBSEARCH_HINTS.test(tool.name + " " + (tool.description || ""));
+        if (isWebsearch && !mcpSelectedTools[qualified]) {
+          // Automatisch aktivieren – Websearch über MCP, falls angeboten
+          mcpSelectedTools[qualified] = {
+            qualified,
+            name: tool.name,
+            description: tool.description || "",
+            params: tool.inputSchema || { type: "object", properties: {} },
+          };
+          autoSearchPicked = true;
+        }
         const label = document.createElement("label");
-        label.className = "mcp-tool-item";
+        label.className = "mcp-tool-item" + (isWebsearch ? " mcp-tool-websearch" : "");
         const cb = document.createElement("input");
         cb.type = "checkbox";
         cb.checked = !!mcpSelectedTools[qualified];
         const desc = tool.description ? ` — ${tool.description}` : "";
+        const badge = isWebsearch ? " 🌐" : "";
         label.appendChild(cb);
         const span = document.createElement("span");
-        span.textContent = tool.name + (desc || "");
+        span.textContent = tool.name + badge + (desc || "");
         label.appendChild(span);
         cb.addEventListener("change", () => {
           if (cb.checked) {
@@ -256,6 +273,12 @@ async function loadMcpTools() {
       });
       list.appendChild(group);
     });
+    if (autoSearchPicked) {
+      const note = document.createElement("div");
+      note.className = "mcp-tools-note";
+      note.textContent = "🌐 Websearch-Tool über MCP automatisch aktiviert.";
+      list.prepend(note);
+    }
   } catch (e) {
     pill.textContent = "MCP: Fehler";
     console.error("MCP tools error:", e);
@@ -478,16 +501,80 @@ async function renderChatList() {
     chats.forEach((c) => {
       const item = document.createElement("div");
       item.className = "conversation-item";
+      if (c.archived) item.classList.add("archived");
       if (c.id === currentChatId) item.classList.add("active");
       item.dataset.id = String(c.id);
       const title = c.name && c.name !== "New Chat" ? c.name : "Neuer Chat";
-      item.innerHTML = `<span class="conv-title">${escapeHtml(title)}</span>`;
+      const actions = `
+        <span class="conv-actions">
+          <button class="conv-act" data-action="rename" title="Umbenennen">✏️</button>
+          <button class="conv-act" data-action="archive" title="${c.archived ? "Wiederherstellen" : "Archivieren"}">${c.archived ? "↩️" : "🗄️"}</button>
+          <button class="conv-act" data-action="export" title="Exportieren">⬇️</button>
+        </span>`;
+      item.innerHTML = `<span class="conv-title">${escapeHtml(title)}</span>${actions}`;
       list.appendChild(item);
     });
     return chats;
   } catch (e) {
     console.error("renderChatList error:", e);
     return [];
+  }
+}
+
+async function renameChat(chatId) {
+  const name = prompt("Neuer Name für den Chat:");
+  if (name === null) return;
+  if (!name.trim()) return;
+  try {
+    const res = await fetch(`/api/chat/${chatId}/rename`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    if (!res.ok) throw new Error(`Rename-Fehler (${res.status})`);
+    await renderChatList();
+  } catch (e) {
+    console.error("Rename error:", e);
+    alert("Umbenennen fehlgeschlagen: " + e.message);
+  }
+}
+
+async function archiveChat(chatId, archived) {
+  try {
+    const res = await fetch(`/api/chat/${chatId}/archive`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived }),
+    });
+    if (!res.ok) throw new Error(`Archive-Fehler (${res.status})`);
+    if (archived && currentChatId === chatId) {
+      currentChatId = null;
+      resetChat();
+    }
+    await renderChatList();
+  } catch (e) {
+    console.error("Archive error:", e);
+    alert("Archivieren fehlgeschlagen: " + e.message);
+  }
+}
+
+async function exportChat(chatId, format = "markdown") {
+  try {
+    const res = await fetch(`/api/chat/${chatId}/export?format=${format}`);
+    if (!res.ok) throw new Error(`Export-Fehler (${res.status})`);
+    const data = await res.json();
+    const blob = new Blob(
+      [format === "json" ? JSON.stringify(data, null, 2) : data.content],
+      { type: format === "json" ? "application/json" : "text/markdown" }
+    );
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `chat-${chatId}.${format === "json" ? "json" : "md"}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    console.error("Export error:", e);
+    alert("Export fehlgeschlagen: " + e.message);
   }
 }
 
@@ -749,8 +836,42 @@ document.addEventListener("DOMContentLoaded", async () => {
   // New chat button
   el("newChatButton").addEventListener("click", createNewChat);
 
+  // Archiv-Toggle
+  const archiveToggle = el("archiveToggle");
+  if (archiveToggle) {
+    archiveToggle.addEventListener("click", () => {
+      showArchived = !showArchived;
+      archiveToggle.classList.toggle("active", showArchived);
+      archiveToggle.textContent = showArchived ? "🗄️ Nur aktive Chats" : "🗄️ Archiv anzeigen";
+      renderChatList();
+    });
+  }
+
+  // Export-Button in der Top-Bar (exportiert den aktuellen Chat)
+  const exportBtn = el("exportChatButton");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", () => {
+      if (currentChatId == null) {
+        alert("Kein Chat ausgewählt.");
+        return;
+      }
+      exportChat(currentChatId);
+    });
+  }
+
   // Conversation list click -> switch chats
   el("conversationList").addEventListener("click", async (e) => {
+    const actBtn = e.target.closest(".conv-act");
+    if (actBtn) {
+      const item = actBtn.closest(".conversation-item");
+      if (!item) return;
+      const chatId = Number(item.dataset.id);
+      const action = actBtn.dataset.action;
+      if (action === "rename") return renameChat(chatId);
+      if (action === "archive") return archiveChat(chatId, !item.classList.contains("archived"));
+      if (action === "export") return exportChat(chatId);
+      return;
+    }
     let target = e.target;
     while (target !== null && !target.classList.contains("conversation-item")) {
       target = target.parentElement;
