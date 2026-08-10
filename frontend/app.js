@@ -381,6 +381,22 @@ function appendMessage(role, text, clear = false) {
   container.scrollTop = container.scrollHeight;
 }
 
+// Denkanzeige: wird angezeigt, während auf die Antwort gewartet wird.
+function showThinking() {
+  const container = el("messages");
+  const empty = el("emptyState");
+  if (empty) empty.remove();
+  const msg = document.createElement("div");
+  msg.className = "message assistant thinking";
+  msg.innerHTML = '<span class="thinking-dot"></span><span class="thinking-dot"></span><span class="thinking-dot"></span><span class="thinking-text">Denkt nach…</span>';
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+  return msg;
+}
+function removeThinking(el) {
+  if (el && el.parentNode) el.parentNode.removeChild(el);
+}
+
 function appendImageMessage(urls, clear = false) {
   const container = el("messages");
   if (clear) container.innerHTML = "";
@@ -1054,7 +1070,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     try {
       if (mode === "image") {
-        const resp = await generateImage(finalText);
+        const thinking = showThinking();
+        let resp;
+        try {
+          resp = await generateImage(finalText);
+        } finally {
+          removeThinking(thinking);
+        }
         const urls = (resp.images || []).map((i) => i.url);
         if (urls.length) {
           appendImageMessage(urls);
@@ -1063,13 +1085,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       } else {
         const model = select.value || undefined;
-        const resp = await sendChatMessage(
-          { role: "user", content: finalText },
-          model,
-          currentChatId
-        );
-        const assistantText = resp.content || "";
-        currentChatId = resp.chat_id;
+        const thinking = showThinking();
+        let assistantText;
+        try {
+          const resp = await sendChatMessage(
+            { role: "user", content: finalText },
+            model,
+            currentChatId
+          );
+          assistantText = resp.content || "";
+          currentChatId = resp.chat_id;
+        } finally {
+          removeThinking(thinking);
+        }
         appendMessage("assistant", assistantText);
 
         history.push({ role: "user", content: finalText });
