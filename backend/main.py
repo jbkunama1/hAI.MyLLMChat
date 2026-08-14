@@ -769,7 +769,7 @@ async def mcp_servers():
     }
 
 
-@app.post("/api/mcp/{server_name}/{path:path}")
+@app.api_route("/api/mcp/{server_name}/{path:path}", methods=["POST", "PUT", "PATCH", "GET", "DELETE"])
 async def mcp_proxy(server_name: str, path: str, request: Request):
     """
     Proxyt POST/PUT/PATCH/GET/DELETE an den konfigurierten MCP-Server.
