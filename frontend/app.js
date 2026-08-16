@@ -1165,6 +1165,12 @@ document.addEventListener("DOMContentLoaded", async () => {
   const openSettings = () => settingsModal.classList.remove("hidden");
   const closeSettings = () => settingsModal.classList.add("hidden");
   const adminState = { providers: [], models: [], mcp_servers: [] };
+  let adminFormReady = false;
+
+  const setAdminFormReady = (ready) => {
+    adminFormReady = ready;
+    el("adminSaveForm").disabled = !ready;
+  };
 
   const renderAdminForm = () => {
     renderAdminList("adminProviders", adminState.providers, ADMIN_PROVIDER_FIELDS, {
@@ -1176,6 +1182,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   };
 
   const loadAdminForm = async () => {
+    setAdminFormReady(false);
     try {
       const cfg = await fetchAdminConfig();
       if (!cfg) {
@@ -1186,6 +1193,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       adminState.models = cfg.models || [];
       adminState.mcp_servers = cfg.mcp_servers || [];
       renderAdminForm();
+      setAdminFormReady(true);
     } catch (e) {
       alert("Admin-Konfiguration konnte nicht geladen werden: " + e.message);
     }
@@ -1205,6 +1213,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   el("adminSaveForm").addEventListener("click", async () => {
+    if (!adminFormReady) return;
     try {
       const cfg = {
         providers: collectAdminList("adminProviders", adminState.providers, ADMIN_PROVIDER_FIELDS, {
