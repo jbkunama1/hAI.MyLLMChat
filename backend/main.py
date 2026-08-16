@@ -1,4 +1,5 @@
 import os
+import json
 import base64
 from typing import Any, Dict, List, Optional
 import sqlite3
@@ -349,50 +350,50 @@ async def select_provider(req: Optional[Dict[str, Any]] = Body(None)):
     return {"status": "ok", "provider_id": provider_id}
 
 
-    @app.post("/api/providers/refresh-models")
-    async def refresh_provider_models():
-        """Fragt die Modellliste des aktiven Providers ab (GET {base_url}/models) und speichert sie."""
-        cfg = load_config()
-        provider = get_selected_provider()
-        backend = get_chat_backend()
+@app.post("/api/providers/refresh-models")
+async def refresh_provider_models():
+    """Fragt die Modellliste des aktiven Providers ab (GET {base_url}/models) und speichert sie."""
+    cfg = load_config()
+    provider = get_selected_provider()
+    backend = get_chat_backend()
 
-        base_url = (provider or {}).get("base_url") or backend.get("base_url")
-        api_key = (provider or {}).get("api_key") or backend.get("api_key")
-        if not base_url:
-            raise HTTPException(status_code=400, detail="Kein aktiver Provider / kein Chat-Backend konfiguriert.")
+    base_url = (provider or {}).get("base_url") or backend.get("base_url")
+    api_key = (provider or {}).get("api_key") or backend.get("api_key")
+    if not base_url:
+        raise HTTPException(status_code=400, detail="Kein aktiver Provider / kein Chat-Backend konfiguriert.")
 
-        url = base_url.rstrip("/") + "/models"
-        headers = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"Bearer {api_key}"
+    url = base_url.rstrip("/") + "/models"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
 
-        try:
-            async with httpx.AsyncClient(timeout=60) as client:
-                resp = await client.get(url, headers=headers)
-        except httpx.RequestError:
-            raise HTTPException(status_code=502, detail="Modell-Endpoint des Providers nicht erreichbar.")
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.get(url, headers=headers)
+    except httpx.RequestError:
+        raise HTTPException(status_code=502, detail="Modell-Endpoint des Providers nicht erreichbar.")
 
-        if resp.status_code >= 400:
-            raise HTTPException(status_code=502, detail=f"Provider antwortete mit {resp.status_code}.")
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"Provider antwortete mit {resp.status_code}.")
 
-        try:
-            data = resp.json()
-        except Exception:
-            raise HTTPException(status_code=502, detail="Unerwartetes Format der Modellliste.")
+    try:
+        data = resp.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="Unerwartetes Format der Modellliste.")
 
-        if isinstance(data, dict) and isinstance(data.get("data"), list):
-            models = [m.get("id") for m in data["data"] if isinstance(m, dict) and m.get("id")]
-            models = sorted(dict.fromkeys(str(m) for m in models))
-        else:
-            raise HTTPException(status_code=502, detail="Keine 'data[].id'-Modellliste empfangen.")
+    if isinstance(data, dict) and isinstance(data.get("data"), list):
+        models = [m.get("id") for m in data["data"] if isinstance(m, dict) and m.get("id")]
+        models = sorted(dict.fromkeys(str(m) for m in models))
+    else:
+        raise HTTPException(status_code=502, detail="Keine 'data[].id'-Modellliste empfangen.")
 
-        if provider:
-            provider["models"] = models
-            save_config(cfg)
-        return {"models": models}
+    if provider:
+        provider["models"] = models
+        save_config(cfg)
+    return {"models": models}
 
 
-    # ---------- File Upload ----------
+# ---------- File Upload ----------
 
 @app.post("/api/upload")
 async def upload(file: UploadFile = File(...)):
@@ -535,7 +536,13 @@ async def chat(req: ChatRequest):
                 server_name, tool_name = function_name.split("__", 1)
                 print(f"Calling tool {tool_name} on server {server_name} with args {arguments}")
                 try:
-                    output = await call_tool(server_name, tool_name, arguments)
+                    try:
+                        parsed_args = json.loads(arguments) if isinstance(arguments, str) else arguments
+                        if not isinstance(parsed_args, dict):
+                            raise ValueError("arguments must be a JSON object")
+                    except (ValueError, TypeError) as e:
+                        raise RuntimeError(f"Invalid JSON arguments: {e}")
+                    output = await call_tool(server_name, tool_name, parsed_args)
                     tool_responses.append({
                         "tool_call_id": tc["id"],
                         "output": output
@@ -549,7 +556,12 @@ async def chat(req: ChatRequest):
 
             # Add tool_responses to history and continue loop
             history_for_llm.append(data["choices"][0]["message"])
-            history_for_llm.append({"role": "tool", "tool_calls": tool_calls, "content": tool_responses})
+            for tr in tool_responses:
+                history_for_llm.append({
+                    "role": "tool",
+                    "tool_call_id": tr["tool_call_id"],
+                    "content": str(tr["output"])
+                })
             payload["messages"] = history_for_llm
 
         try:
@@ -608,9 +620,10 @@ async def get_chats(archived: bool = False, include_archived: bool = False):
 @app.post("/api/chat/{chat_id}/rename")
 async def rename_chat(chat_id: int, body: Dict[str, Any] = Body(...)):
     """Renames an existing chat."""
-    name = (body.get("name") or "").strip()
-    if not name:
-        raise HTTPException(status_code=400, detail="Name darf nicht leer sein.")
+    name = body.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise HTTPException(status_code=422, detail="Name muss ein nicht-leerer String sein.")
+    name = name.strip()
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -627,7 +640,9 @@ async def rename_chat(chat_id: int, body: Dict[str, Any] = Body(...)):
 @app.post("/api/chat/{chat_id}/archive")
 async def archive_chat(chat_id: int, body: Optional[Dict[str, Any]] = Body(None)):
     """Archiviert (archived=true) oder stellt wieder her (archived=false)."""
-    archived = bool(body.get("archived", True)) if isinstance(body, dict) else True
+    archived = body.get("archived", True) if isinstance(body, dict) else True
+    if not isinstance(archived, bool):
+        raise HTTPException(status_code=422, detail="archived muss ein Boolean sein.")
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
@@ -652,7 +667,7 @@ async def export_chat(chat_id: int, format: str = Query(default="markdown")):
         if not chat:
             raise HTTPException(status_code=404, detail="Chat nicht gefunden.")
         cursor.execute(
-            "SELECT role, content, created_at FROM messages WHERE chat_id=? ORDER BY created_at",
+            "SELECT role, content, created_at FROM messages WHERE chat_id=? ORDER BY created_at, id",
             (chat_id,),
         )
         messages = [dict(row) for row in cursor.fetchall()]
@@ -746,7 +761,7 @@ async def generate_image(req: ImageRequest):
 @app.get("/api/mcp/tools")
 async def list_mcp_tools():
     """Aggregiert die Tool-Listen aller konfigurierten MCP-Server."""
-    servers = fetch_all_server_tools()
+    servers = await fetch_all_server_tools()
     return {
         "enabled": bool(servers),
         "servers": [
