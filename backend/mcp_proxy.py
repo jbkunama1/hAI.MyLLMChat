@@ -21,7 +21,11 @@ def find_server(name: str) -> Optional[Dict[str, Any]]:
 
 
 def _server_headers(server: Dict[str, Any], method: str = "post", name: Optional[str] = None) -> Dict[str, str]:
-    headers = {"Content-Type": "application/json", "MCP-Protocol-Version": "2026-07-28"}
+    headers = {
+        "Content-Type": "application/json",
+        "Accept": "application/json, text/event-stream",
+        "MCP-Protocol-Version": "2026-07-28",
+    }
     headers["Mcp-Method"] = method.upper()
     if name:
         headers["Mcp-Name"] = name
