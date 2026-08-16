@@ -20,8 +20,11 @@ def find_server(name: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _server_headers(server: Dict[str, Any]) -> Dict[str, str]:
-    headers = {"Content-Type": "application/json"}
+def _server_headers(server: Dict[str, Any], method: str = "post", name: Optional[str] = None) -> Dict[str, str]:
+    headers = {"Content-Type": "application/json", "MCP-Protocol-Version": "2026-07-28"}
+    headers["Mcp-Method"] = method.upper()
+    if name:
+        headers["Mcp-Name"] = name
     if server.get("api_key"):
         headers["Authorization"] = f"Bearer {server['api_key']}"
     return headers
@@ -35,7 +38,7 @@ async def fetch_server_tools(server: Dict[str, Any]) -> List[Dict[str, Any]]:
     url = server["url"].rstrip("/") + "/tools"
     try:
         async with httpx.AsyncClient(timeout=MCP_TIMEOUT) as client:
-            resp = await client.get(url, headers=_server_headers(server))
+            resp = await client.get(url, headers=_server_headers(server, method="GET"))
         if resp.status_code >= 400:
             return []
         data = resp.json()
@@ -64,7 +67,7 @@ async def call_tool(server_name: str, tool_name: str, arguments: Dict[str, Any])
 
     server = find_server(server_name)
     url = server["url"].rstrip("/") + "/tools/call"
-    headers = _server_headers(server)
+    headers = _server_headers(server, method="POST", name=tool_name)
 
     async with httpx.AsyncClient(timeout=MCP_TIMEOUT) as client:
         resp = await client.post(url, json={"name": tool_name, "arguments": arguments or {}}, headers=headers)
@@ -86,7 +89,7 @@ async def proxy_request(name: str, path: str, method: str, body: Any) -> Dict[st
         raise LookupError(f"MCP-Server '{name}' nicht konfiguriert")
 
     url = server["url"].rstrip("/") + "/" + path.lstrip("/")
-    headers = _server_headers(server)
+    headers = _server_headers(server, method="PUT", name="tool_update")
 
     async with httpx.AsyncClient(timeout=MCP_TIMEOUT) as client:
         resp = await client.request(method, url, json=body or {}, headers=headers)
