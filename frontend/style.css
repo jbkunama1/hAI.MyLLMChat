@@ -77,6 +77,7 @@
   --accent: #ffbf00;
   --accent-hover: #ffcc33;
   --accent-soft: rgba(255,191,0,0.15);
+
   background: #1a1a1a; /* dark background */
   color: #ffbf00;
 }
@@ -84,6 +85,7 @@
   --accent: #00ff00;
   --accent-hover: #66ff66;
   --accent-soft: rgba(0,255,0,0.15);
+
   background: #000000;
   color: #00ff00;
   font-family: "JetBrains Mono", monospace;
@@ -255,7 +257,8 @@ body {
   transition: opacity 0.15s ease;
 }
 .conversation-item:hover .conv-actions,
-.conversation-item.active .conv-actions {
+.conversation-item.active .conv-actions,
+.conversation-item:focus-within .conv-actions {
   opacity: 1;
 }
 .conv-act {

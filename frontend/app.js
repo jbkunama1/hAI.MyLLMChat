@@ -142,6 +142,7 @@ async function fetchChats() {
 
 // --- Chat-Verlauf-Suche ---
 let searchTimer = null;
+let searchSeq = 0;
 
 function renderSearchResults(results, list) {
   list.innerHTML = "";
@@ -171,10 +172,12 @@ async function searchHistory(query) {
     await renderChatList();
     return;
   }
+  const seq = ++searchSeq;
   try {
     const res = await fetch(`/api/history/search?q=${encodeURIComponent(query.trim())}`);
     if (!res.ok) return;
-    renderSearchResults(await res.json(), list);
+    const results = await res.json();
+    if (seq === searchSeq) renderSearchResults(results, list);
   } catch (e) {
     console.error("Search error:", e);
   }
@@ -209,19 +212,19 @@ const WEBSEARCH_HINTS = /search|web|browse|scrape|fetch_url|google|bing|brave/i;
 async function loadMcpTools() {
   const list = el("mcpToolsList");
   const pill = el("mcpPill");
-  if (!list || !pill) return;
+  if (!list || !pill) return false;
   try {
     const res = await fetch("/api/mcp/tools");
     if (!res.ok) {
       pill.textContent = "MCP: Fehler";
-      return;
+      return false;
     }
     const data = await res.json();
     const servers = data.servers || [];
     if (!servers.length) {
       pill.textContent = "MCP: –";
       list.innerHTML = `<div class="mcp-tools-empty">Keine MCP-Server konfiguriert.</div>`;
-      return;
+      return true;
     }
     const toolCount = servers.reduce((n, s) => n + (s.tools || []).length, 0);
     pill.textContent = `MCP: ${servers.length} (${toolCount} Tools)`;
@@ -279,9 +282,11 @@ async function loadMcpTools() {
       note.textContent = "🌐 Websearch-Tool über MCP automatisch aktiviert.";
       list.prepend(note);
     }
+    return true;
   } catch (e) {
     pill.textContent = "MCP: Fehler";
     console.error("MCP tools error:", e);
+    return false;
   }
 }
 
@@ -292,15 +297,17 @@ function setupMcpControls() {
   pill.addEventListener("click", async () => {
     const willOpen = panel.classList.contains("hidden");
     if (willOpen && !panel.dataset.loaded) {
-      await loadMcpTools();
-      panel.dataset.loaded = "1";
+      const loaded = await loadMcpTools();
+      if (loaded) panel.dataset.loaded = "1";
     }
     panel.classList.toggle("hidden", !willOpen);
+    pill.setAttribute("aria-expanded", willOpen ? "true" : "false");
   });
   document.addEventListener("click", (e) => {
     if (!panel.classList.contains("hidden") &&
         !panel.contains(e.target) && !pill.contains(e.target)) {
       panel.classList.add("hidden");
+      pill.setAttribute("aria-expanded", "false");
     }
   });
 }
@@ -935,6 +942,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const select = el("modelSelect");
 
   async function populateModelSelect() {
+    const prev = select.value;
     select.innerHTML = "";
     const models = await fetchModels();
     if (models.length) {
@@ -944,7 +952,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         opt.textContent = m;
         select.appendChild(opt);
       });
-      if (config?.chat?.model && models.includes(config.chat.model)) {
+      if (prev && models.includes(prev)) {
+        select.value = prev;
+      } else if (config?.chat?.model && models.includes(config.chat.model)) {
         select.value = config.chat.model;
       }
     } else if (config?.chat?.model) {
