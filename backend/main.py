@@ -1,16 +1,30 @@
 import os
+import json
 import base64
 from typing import Any, Dict, List, Optional
 import sqlite3
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException, Depends, Header, Body, UploadFile, File, Query
+from fastapi import FastAPI, HTTPException, Depends, Header, Body, UploadFile, File, Query, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 import httpx
 
-from backend.config_store import load_config, save_config, DATA_DIR
+from backend.config_store import (
+    load_config,
+    save_config,
+    DATA_DIR,
+    ProviderConfig,
+    ModelConfig,
+    McpServerConfig,
+)
+from backend.mcp_proxy import (
+    get_mcp_servers,
+    proxy_request,
+    fetch_all_server_tools,
+    call_tool,
+)
 
 app = FastAPI()
 
@@ -70,9 +84,14 @@ def init_db():
             CREATE TABLE IF NOT EXISTS chats (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 name TEXT NOT NULL,
+                archived INTEGER NOT NULL DEFAULT 0,
                 created_at DATETIME DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Migration: archived column for bestehende Datenbanken
+        cols = [r[1] for r in cursor.execute("PRAGMA table_info(chats)").fetchall()]
+        if "archived" not in cols:
+            cursor.execute("ALTER TABLE chats ADD COLUMN archived INTEGER NOT NULL DEFAULT 0")
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS messages (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -104,6 +123,7 @@ class ChatRequest(BaseModel):
     model: str | None = None
     temperature: float | None = 0.7
     chat_id: int | None = None  # optional chat ID
+    tools: List[Dict[str, Any]] | None = None  # OpenAI-Tool-Definitionen (MCP)
 
 
 class ChatResponse(BaseModel):
@@ -148,6 +168,12 @@ async def get_config():
         masked["providers"] = [
             {**p, "api_key": "***"} if p.get("api_key") else p
             for p in masked["providers"]
+        ]
+    # Maskiere API-Keys der MCP-Server
+    if masked.get("mcp_servers"):
+        masked["mcp_servers"] = [
+            {**s, "api_key": "***"} if s.get("api_key") else s
+            for s in masked["mcp_servers"]
         ]
 
     return masked
@@ -247,11 +273,16 @@ async def list_models():
     """
     cfg = load_config()
     provider = get_selected_provider()
+    
+    # Wenn ein Provider ausgewählt ist und er Modelle hat, diese zurückgeben
     if provider and provider.get("models"):
         return {"models": provider["models"]}
+    
+    # Fallback auf das im Chat konfigurierte Modell
     model = cfg.get("chat", {}).get("model")
     if model:
         return {"models": [model]}
+    
     return {"models": []}
 
 
@@ -317,6 +348,49 @@ async def select_provider(req: Optional[Dict[str, Any]] = Body(None)):
 
     save_config(cfg)
     return {"status": "ok", "provider_id": provider_id}
+
+
+@app.post("/api/providers/refresh-models")
+async def refresh_provider_models():
+    """Fragt die Modellliste des aktiven Providers ab (GET {base_url}/models) und speichert sie."""
+    cfg = load_config()
+    provider = get_selected_provider()
+    backend = get_chat_backend()
+
+    base_url = (provider or {}).get("base_url") or backend.get("base_url")
+    api_key = (provider or {}).get("api_key") or backend.get("api_key")
+    if not base_url:
+        raise HTTPException(status_code=400, detail="Kein aktiver Provider / kein Chat-Backend konfiguriert.")
+
+    url = base_url.rstrip("/") + "/models"
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.get(url, headers=headers)
+    except httpx.RequestError:
+        raise HTTPException(status_code=502, detail="Modell-Endpoint des Providers nicht erreichbar.")
+
+    if resp.status_code >= 400:
+        raise HTTPException(status_code=502, detail=f"Provider antwortete mit {resp.status_code}.")
+
+    try:
+        data = resp.json()
+    except Exception:
+        raise HTTPException(status_code=502, detail="Unerwartetes Format der Modellliste.")
+
+    if isinstance(data, dict) and isinstance(data.get("data"), list):
+        models = [m.get("id") for m in data["data"] if isinstance(m, dict) and m.get("id")]
+        models = sorted(dict.fromkeys(str(m) for m in models))
+    else:
+        raise HTTPException(status_code=502, detail="Keine 'data[].id'-Modellliste empfangen.")
+
+    if provider:
+        provider["models"] = models
+        save_config(cfg)
+    return {"models": models}
 
 
 # ---------- File Upload ----------
@@ -417,22 +491,78 @@ async def chat(req: ChatRequest):
             "messages": history_for_llm,
             "temperature": req.temperature,
             "stream": False,
+            "tools": req.tools, # Hinzugefügt für Tool-Support
         }
 
         headers = {"Content-Type": "application/json"}
         if backend["api_key"]:
             headers["Authorization"] = f"Bearer {backend['api_key']}"
 
-        try:
-            async with httpx.AsyncClient(timeout=60) as client:
-                resp = await client.post(url, json=payload, headers=headers)
-            if resp.status_code != 200:
-                print("Upstream error:", resp.status_code, resp.text)
-                raise HTTPException(status_code=502, detail=f"Upstream-Fehler: {resp.status_code}")
-            data = resp.json()
-        except httpx.RequestError as e:
-            print("HTTP error:", e)
-            raise HTTPException(status_code=502, detail="Chat-Backend nicht erreichbar.")
+        MAX_TOOL_CALL_ITERATIONS = 3
+        for _ in range(MAX_TOOL_CALL_ITERATIONS):
+            try:
+                async with httpx.AsyncClient(timeout=60) as client:
+                    resp = await client.post(url, json=payload, headers=headers)
+                if resp.status_code != 200:
+                    print("Upstream error:", resp.status_code, resp.text)
+                    raise HTTPException(status_code=502, detail=f"Upstream-Fehler: {resp.status_code}")
+                data = resp.json()
+            except httpx.RequestError as e:
+                print("HTTP error:", e)
+                raise HTTPException(status_code=502, detail="Chat-Backend nicht erreichbar.")
+
+            # Check for tool_calls in the response
+            tool_calls = data.get("choices", [])[0].get("message", {}).get("tool_calls")
+            if not tool_calls:
+                # No tool calls, break the loop and process as a normal message
+                break
+
+            # Process tool calls
+            tool_responses = []
+            for tc in tool_calls:
+                function_name = tc["function"]["name"]
+                arguments = tc["function"]["arguments"]
+
+                # Determine which MCP server/tool to call
+                # Tool names are expected in format 'server_name__tool_name'
+                if "__" not in function_name:
+                    print(f"Invalid tool name format: {function_name}")
+                    tool_responses.append({
+                        "tool_call_id": tc["id"],
+                        "output": f"Error: Invalid tool format. Expected server__tool: {function_name}"
+                    })
+                    continue
+
+                server_name, tool_name = function_name.split("__", 1)
+                print(f"Calling tool {tool_name} on server {server_name} with args {arguments}")
+                try:
+                    try:
+                        parsed_args = json.loads(arguments) if isinstance(arguments, str) else arguments
+                        if not isinstance(parsed_args, dict):
+                            raise ValueError("arguments must be a JSON object")
+                    except (ValueError, TypeError) as e:
+                        raise RuntimeError(f"Invalid JSON arguments: {e}")
+                    output = await call_tool(server_name, tool_name, parsed_args)
+                    tool_responses.append({
+                        "tool_call_id": tc["id"],
+                        "output": output
+                    })
+                except (LookupError, RuntimeError) as e:
+                    print(f"Tool call error: {e}")
+                    tool_responses.append({
+                        "tool_call_id": tc["id"],
+                        "output": f"Error calling tool {function_name}: {str(e)}"
+                    })
+
+            # Add tool_responses to history and continue loop
+            history_for_llm.append(data["choices"][0]["message"])
+            for tr in tool_responses:
+                history_for_llm.append({
+                    "role": "tool",
+                    "tool_call_id": tr["tool_call_id"],
+                    "content": str(tr["output"])
+                })
+            payload["messages"] = history_for_llm
 
         try:
             content = data["choices"][0]["message"]["content"]
@@ -468,14 +598,118 @@ async def get_chat_history(chat_id: int):
 
 
 @app.get("/api/chats")
-async def get_chats():
-    """Get list of all chats (for sidebar)."""
+async def get_chats(archived: bool = False, include_archived: bool = False):
+    """Get list of chats (for sidebar). Standard nur nicht-archivierte Chats;
+    include_archived=true liefert zusätzlich die Archivierten."""
     conn = get_db_connection()
     try:
         cursor = conn.cursor()
-        cursor.execute("SELECT id, name, created_at FROM chats ORDER BY created_at DESC")
+        if include_archived:
+            cursor.execute("SELECT id, name, archived, created_at FROM chats ORDER BY archived, created_at DESC")
+        else:
+            cursor.execute("SELECT id, name, archived, created_at FROM chats WHERE archived=? ORDER BY created_at DESC", (1 if archived else 0,))
         chats = cursor.fetchall()
-        return [{"id": row["id"], "name": row["name"], "created_at": row["created_at"]} for row in chats]
+        return [
+            {"id": row["id"], "name": row["name"], "archived": bool(row["archived"]), "created_at": row["created_at"]}
+            for row in chats
+        ]
+    finally:
+        conn.close()
+
+
+@app.post("/api/chat/{chat_id}/rename")
+async def rename_chat(chat_id: int, body: Dict[str, Any] = Body(...)):
+    """Renames an existing chat."""
+    name = body.get("name")
+    if not isinstance(name, str) or not name.strip():
+        raise HTTPException(status_code=422, detail="Name muss ein nicht-leerer String sein.")
+    name = name.strip()
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM chats WHERE id=?", (chat_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Chat nicht gefunden.")
+        cursor.execute("UPDATE chats SET name=? WHERE id=?", (name[:200], chat_id))
+        conn.commit()
+        return {"status": "ok", "id": chat_id, "name": name[:200]}
+    finally:
+        conn.close()
+
+
+@app.post("/api/chat/{chat_id}/archive")
+async def archive_chat(chat_id: int, body: Optional[Dict[str, Any]] = Body(None)):
+    """Archiviert (archived=true) oder stellt wieder her (archived=false)."""
+    archived = body.get("archived", True) if isinstance(body, dict) else True
+    if not isinstance(archived, bool):
+        raise HTTPException(status_code=422, detail="archived muss ein Boolean sein.")
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM chats WHERE id=?", (chat_id,))
+        if not cursor.fetchone():
+            raise HTTPException(status_code=404, detail="Chat nicht gefunden.")
+        cursor.execute("UPDATE chats SET archived=? WHERE id=?", (1 if archived else 0, chat_id))
+        conn.commit()
+        return {"status": "ok", "id": chat_id, "archived": archived}
+    finally:
+        conn.close()
+
+
+@app.get("/api/chat/{chat_id}/export")
+async def export_chat(chat_id: int, format: str = Query(default="markdown")):
+    """Exportiert einen Chat als Markdown oder JSON."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, name, created_at FROM chats WHERE id=?", (chat_id,))
+        chat = cursor.fetchone()
+        if not chat:
+            raise HTTPException(status_code=404, detail="Chat nicht gefunden.")
+        cursor.execute(
+            "SELECT role, content, created_at FROM messages WHERE chat_id=? ORDER BY created_at, id",
+            (chat_id,),
+        )
+        messages = [dict(row) for row in cursor.fetchall()]
+
+        if format == "json":
+            return {
+                "chat_id": chat["id"],
+                "name": chat["name"],
+                "created_at": chat["created_at"],
+                "messages": messages,
+            }
+
+        # Markdown
+        lines = [f"# {chat['name']}", "", f"_Exportiert: {chat['created_at']}_", ""]
+        for m in messages:
+            who = "**Du**" if m["role"] == "user" else "**Assistant**"
+            lines.append(f"### {who} ({m['created_at']})")
+            lines.append("")
+            lines.append(m["content"])
+            lines.append("")
+        return {"format": "markdown", "content": "\n".join(lines)}
+    finally:
+        conn.close()
+
+
+@app.get("/api/history/search")
+async def search_history(q: str = Query(..., min_length=1)):
+    """Volltextsuche über alle Chat-Nachrichten (LIKE-Suche)."""
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            SELECT m.id, m.chat_id, c.name AS chat_name, m.role, m.content, m.created_at
+            FROM messages m JOIN chats c ON c.id = m.chat_id
+            WHERE m.content LIKE ?
+            ORDER BY m.created_at DESC
+            LIMIT 100
+            """,
+            (f"%{q}%",),
+        )
+        return [dict(row) for row in cursor.fetchall()]
     finally:
         conn.close()
 
@@ -526,10 +760,122 @@ async def generate_image(req: ImageRequest):
 
 @app.get("/api/mcp/tools")
 async def list_mcp_tools():
-    mcp = get_mcp_config()
-    if not mcp["enabled"] or not mcp["base_url"]:
-        return {"enabled": False, "tools": []}
-    return {"enabled": True, "tools": []}
+    """Aggregiert die Tool-Listen aller konfigurierten MCP-Server."""
+    servers = await fetch_all_server_tools()
+    return {
+        "enabled": bool(servers),
+        "servers": [
+            {"name": name, "tools": tools}
+            for name, tools in servers.items()
+        ],
+    }
+
+
+# ---------- MCP-Proxy-Endpoints ----------
+
+@app.get("/api/mcp/servers")
+async def mcp_servers():
+    """Listet konfigurierte MCP-Server (ohne API-Keys)."""
+    return {
+        "servers": [
+            {**s, "api_key": "***"} if s.get("api_key") else s
+            for s in get_mcp_servers()
+        ]
+    }
+
+
+@app.api_route("/api/mcp/{server_name}/{path:path}", methods=["POST", "PUT", "PATCH", "GET", "DELETE"])
+async def mcp_proxy(server_name: str, path: str, request: Request):
+    """
+    Proxyt POST/PUT/PATCH/GET/DELETE an den konfigurierten MCP-Server.
+    Beispiel: POST /api/mcp/myserver/tools/call
+    """
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    try:
+        return await proxy_request(server_name, path, request.method, body)
+    except LookupError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"MCP-Server nicht erreichbar: {e}")
+
+
+# ---------- Admin Settings Endpoints ----------
+
+def _validated(items: Any, model) -> List[Dict[str, Any]]:
+    """Validiert eine eingehende Liste gegen das Pydantic-Model; wirft 422 bei ungültigen Einträgen."""
+    if not isinstance(items, list):
+        raise HTTPException(status_code=422, detail="Erwartet eine Liste.")
+    try:
+        return [m.model_dump(exclude_unset=True) for m in (model(**i) for i in items)]
+    except ValidationError as e:
+        raise HTTPException(status_code=422, detail=e.errors(include_url=False))
+
+
+@app.get("/api/admin/config", dependencies=[Depends(verify_admin)])
+async def get_admin_config():
+    """Retrieves all admin configuration (includes unmasked API keys)."""
+    cfg = load_config()
+    return cfg
+
+
+@app.post("/api/admin/config/update", dependencies=[Depends(verify_admin)])
+async def update_admin_config(new_cfg: Dict[str, Any] = Body(...)):
+    """
+    Updates administrative configuration including providers, models, and MCP servers.
+    Only accessible with admin authentication.
+    """
+    cfg = load_config()
+
+    # Update providers
+    if "providers" in new_cfg:
+        providers = _validated(new_cfg["providers"], ProviderConfig)
+        current = {p.get("id"): p for p in cfg.get("providers", [])}
+        updated = []
+        for p in providers:
+            base = current.get(p.get("id"), {})
+            merged = {**base}
+            for k, v in p.items():
+                if v is None or (k == "api_key" and v in ("", "***")):
+                    continue
+                merged[k] = v
+            if not merged.get("id"):
+                slug = (merged.get("name") or "provider").strip().lower()
+                slug = "".join(c if c.isalnum() else "-" for c in slug).strip("-")
+                if not slug:
+                    slug = "provider"
+                merged["id"] = slug
+            updated.append(merged)
+        cfg["providers"] = updated
+
+    # Update models
+    if "models" in new_cfg:
+        models = _validated(new_cfg["models"], ModelConfig)
+        current = {m.get("id"): m for m in cfg.get("models", [])}
+        updated = []
+        for m in models:
+            base = current.get(m.get("id"), {})
+            merged = {**base, "name": m.get("name"), "id": m.get("id")}
+            updated.append(merged)
+        cfg["models"] = updated
+
+    # Update MCP servers
+    if "mcp_servers" in new_cfg:
+        cfg["mcp_servers"] = _validated(new_cfg["mcp_servers"], McpServerConfig)
+
+    # Update core sections
+    for section in ("chat", "image", "mcp"):
+        if section in new_cfg and isinstance(new_cfg[section], dict):
+            inner = cfg.get(section, {})
+            inner.update({k: v for k, v in new_cfg[section].items() if v is not None})
+            cfg[section] = inner
+
+    save_config(cfg)
+    return {"status": "ok"}
 
 
 # ---------- Static files (Frontend) ----------

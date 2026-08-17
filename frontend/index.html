@@ -32,6 +32,12 @@
 
       <button id="newChatButton" class="new-chat-btn">+ Neuer Chat</button>
 
+      <div class="sidebar-search">
+        <input id="historySearch" type="search" placeholder="Chat-Verlauf durchsuchen…" autocomplete="off" />
+      </div>
+
+      <button id="archiveToggle" class="archive-toggle-btn" title="Archivierte Chats anzeigen">🗄️ Archiv anzeigen</button>
+
       <div class="conversation-list" id="conversationList">
         <div class="conversation-item active" data-id="default">
           <span class="conv-title">Aktueller Chat</span>
@@ -59,12 +65,22 @@
             <option value="">Lädt…</option>
           </select>
           <label class="model-label">Modell</label>
-          <select id="modelSelect" class="model-select">
-            <option value="">Lädt…</option>
-          </select>
+          <div class="model-select-refresh">
+            <select id="modelSelect" class="model-select">
+              <option value="">Lädt…</option>
+            </select>
+            <button id="refreshModels" class="icon-button mini" title="Modelle aktualisieren">🔄</button>
+          </div>
         </div>
           <div class="top-bar-right">
-            <span class="pill" id="mcpPill">MCP: –</span>
+            <button id="exportChatButton" class="icon-button mini" title="Chat exportieren (Markdown)">⬇️</button>
+            <div id="mcpControls" class="mcp-controls">
+              <button type="button" class="pill clickable" id="mcpPill" aria-controls="mcpToolsPanel" aria-expanded="false">MCP: –</button>
+              <div id="mcpToolsPanel" class="mcp-tools-panel hidden">
+                <header>MCP Tools</header>
+                <div id="mcpToolsList">Lädt Tools…</div>
+              </div>
+            </div>
           </div>
         </header>
 
@@ -130,6 +146,7 @@
         <button class="tab-btn active" data-tab="tab-chat">Chat</button>
         <button class="tab-btn" data-tab="tab-image">Bild</button>
         <button class="tab-btn" data-tab="tab-mcp">MCP</button>
+        <button class="tab-btn" data-tab="tab-admin">Admin</button>
         <button class="tab-btn" data-tab="tab-theme">Design</button>
       </div>
 
@@ -177,6 +194,29 @@
           </label>
         </div>
 
+        <div class="tab-panel" id="tab-admin">
+          <p class="hint">Verwaltung von Providern, Modellen und MCP-Servern. Pflichtfelder sind mit * markiert.</p>
+
+          <h3 class="admin-section-title">Provider</h3>
+          <div id="adminProviders"></div>
+          <button type="button" id="adminAddProvider" class="ghost-btn" style="margin-top:0.4rem;">+ Provider hinzufügen</button>
+
+          <h3 class="admin-section-title">Modelle</h3>
+          <div id="adminModels"></div>
+          <button type="button" id="adminAddModel" class="ghost-btn" style="margin-top:0.4rem;">+ Modell hinzufügen</button>
+
+          <h3 class="admin-section-title">MCP-Server</h3>
+          <div id="adminMcpServers"></div>
+          <button type="button" id="adminAddMcp" class="ghost-btn" style="margin-top:0.4rem;">+ MCP-Server hinzufügen</button>
+
+          <div class="provider-actions" style="margin-top:1rem;">
+            <button type="button" id="adminSaveForm" class="primary-btn">Admin-Konfiguration speichern</button>
+          </div>
+          <p class="hint">
+            Benötigt Admin-Login. API-Keys werden hier unverschlüsselt in <code>/data/config.json</code> gespeichert.
+          </p>
+        </div>
+
         <div class="tab-panel" id="tab-theme">
           <label class="field checkbox-field">
             <input id="cfgLightMode" type="checkbox" />
@@ -186,10 +226,14 @@
           <p class="hint" style="margin-top:0.8rem;">Farbschema:</p>
           <div class="theme-grid">
             <div class="theme-swatch" data-theme="indigo" title="Indigo"></div>
-            <div class="theme-swatch" data-theme="orange" title="Orange"></div>
+            <div class="theme-swatch" data-theme="sunset" title="Sunset"></div>
+            <div class="theme-swatch" data-theme="ocean" title="Ocean"></div>
+            <div class="theme-swatch" data-theme="violet" title="Violet"></div>
             <div class="theme-swatch" data-theme="emerald" title="Emerald"></div>
             <div class="theme-swatch" data-theme="rose" title="Rose"></div>
             <div class="theme-swatch" data-theme="slate" title="Slate"></div>
+            <div class="theme-swatch" data-theme="amber" title="Retro Amber"></div>
+            <div class="theme-swatch" data-theme="matrix" title="Retro Green"></div>
           </div>
 
           <p class="hint" style="margin-top:0.8rem;">Hintergrund:</p>

@@ -1,19 +1,50 @@
 import os
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
+
+from pydantic import BaseModel, Field
 
 DATA_DIR = Path(os.getenv("DATA_DIR", "/data"))
 CONFIG_PATH = DATA_DIR / "config.json"
 
+
+class ProviderConfig(BaseModel):
+    """Ein LLM-Anbieter (Admin-Konfiguration)."""
+
+    id: Optional[str] = None
+    name: str = Field(min_length=1)
+    base_url: str = Field(min_length=1)
+    api_key: Optional[str] = None
+    models: List[str] = []
+    selected: bool = False
+
+
+class ModelConfig(BaseModel):
+    """Ein global verfügbares Modell."""
+
+    id: Optional[str] = None
+    name: str = Field(min_length=1)
+
+
+class McpServerConfig(BaseModel):
+    """Ein MCP-Server (Admin-Konfiguration)."""
+
+    id: Optional[str] = None
+    name: str = Field(min_length=1)
+    url: str = Field(min_length=1)
+    api_key: Optional[str] = None
+
 DEFAULT_CONFIG: Dict[str, Any] = {
+    "providers": [],
+    "models": [],
+    "mcp_servers": [],
     "chat": {
         "name": os.getenv("HAI_DEFAULT_CHAT_NAME"),
         "base_url": os.getenv("HAI_DEFAULT_CHAT_BASE_URL"),
         "api_key": os.getenv("HAI_DEFAULT_CHAT_API_KEY"),
         "model": os.getenv("HAI_DEFAULT_CHAT_MODEL"),
     },
-    "providers": [],
     "image": {
         "name": os.getenv("HAI_DEFAULT_IMAGE_NAME"),
         "base_url": os.getenv("HAI_DEFAULT_IMAGE_BASE_URL"),

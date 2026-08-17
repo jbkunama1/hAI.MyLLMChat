@@ -4,8 +4,9 @@ let currentChatId = null; // Track current chat ID
 let history = [];
 let attachments = [];
 let mode = "chat"; // "chat" | "image"
+let showArchived = false; // Sidebar: Archiv anzeigen
 
-const THEMES = ["indigo", "orange", "emerald", "rose", "slate"];
+const THEMES = ["indigo", "sunset", "ocean", "violet", "emerald", "rose", "slate", "amber", "matrix"];
 const el = (id) => document.getElementById(id);
 
 function loadAdminToken() {
@@ -129,7 +130,7 @@ async function fetchProviders() {
 
 async function fetchChats() {
   try {
-    const res = await fetch("/api/chats");
+    const res = await fetch("/api/chats" + (showArchived ? "?include_archived=true" : ""));
     if (!res.ok) return [];
     const data = await res.json();
     return data || [];
@@ -137,6 +138,178 @@ async function fetchChats() {
     console.error("Chats error:", e);
     return [];
   }
+}
+
+// --- Chat-Verlauf-Suche ---
+let searchTimer = null;
+let searchSeq = 0;
+
+function renderSearchResults(results, list) {
+  list.innerHTML = "";
+  if (!results.length) {
+    list.innerHTML = `<div class="conversation-item"><span class="conv-title">Keine Treffer</span></div>`;
+    return;
+  }
+  results.forEach((r) => {
+    const item = document.createElement("div");
+    item.className = "conversation-item search-result";
+    const snippet = r.content.length > 80 ? r.content.slice(0, 80) + "…" : r.content;
+    item.innerHTML = `
+      <span class="conv-title">${escapeHtml(r.chat_name || "Chat #" + r.chat_id)}</span>
+      <span class="conv-snippet">${escapeHtml(snippet)}</span>`;
+    item.addEventListener("click", async () => {
+      currentChatId = r.chat_id;
+      await loadChatHistory(currentChatId);
+      await renderChatList();
+    });
+    list.appendChild(item);
+  });
+}
+
+async function searchHistory(query) {
+  const list = el("conversationList");
+  if (!query.trim()) {
+    await renderChatList();
+    return;
+  }
+  const seq = ++searchSeq;
+  try {
+    const res = await fetch(`/api/history/search?q=${encodeURIComponent(query.trim())}`);
+    if (!res.ok) return;
+    const results = await res.json();
+    if (seq === searchSeq) renderSearchResults(results, list);
+  } catch (e) {
+    console.error("Search error:", e);
+  }
+}
+
+function setupHistorySearch() {
+  const input = el("historySearch");
+  if (!input) return;
+  input.addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => searchHistory(input.value), 300);
+  });
+}
+
+// --- MCP Tools Panel ---
+let mcpSelectedTools = {}; // { "server__tool": { name, description, params } }
+
+function buildToolPayload(selected) {
+  // Convert selected tool entries into OpenAI tool schema definitions
+  return Object.values(selected).map((t) => ({
+    type: "function",
+    function: {
+      name: t.qualified,            // "server__toolname"
+      description: t.description || "",
+      parameters: t.params || { type: "object", properties: {} },
+    },
+  }));
+}
+
+const WEBSEARCH_HINTS = /search|web|browse|scrape|fetch_url|google|bing|brave/i;
+
+async function loadMcpTools() {
+  const list = el("mcpToolsList");
+  const pill = el("mcpPill");
+  if (!list || !pill) return false;
+  try {
+    const res = await fetch("/api/mcp/tools");
+    if (!res.ok) {
+      pill.textContent = "MCP: Fehler";
+      return false;
+    }
+    const data = await res.json();
+    const servers = data.servers || [];
+    if (!servers.length) {
+      pill.textContent = "MCP: –";
+      list.innerHTML = `<div class="mcp-tools-empty">Keine MCP-Server konfiguriert.</div>`;
+      return true;
+    }
+    const toolCount = servers.reduce((n, s) => n + (s.tools || []).length, 0);
+    pill.textContent = `MCP: ${servers.length} (${toolCount} Tools)`;
+    list.innerHTML = "";
+    // Websearch-Tools automatisch vorauswählen, falls vorhanden
+    let autoSearchPicked = false;
+    servers.forEach((s) => {
+      const group = document.createElement("div");
+      group.className = "mcp-server-group";
+      const tools = s.tools || [];
+      group.innerHTML = `<div class="mcp-server-name">${escapeHtml(s.name)}</div>`;
+      tools.forEach((tool) => {
+        const qualified = `${s.name}__${tool.name}`;
+        const isWebsearch = WEBSEARCH_HINTS.test(tool.name + " " + (tool.description || ""));
+        if (isWebsearch && !mcpSelectedTools[qualified]) {
+          // Automatisch aktivieren – Websearch über MCP, falls angeboten
+          mcpSelectedTools[qualified] = {
+            qualified,
+            name: tool.name,
+            description: tool.description || "",
+            params: tool.inputSchema || { type: "object", properties: {} },
+          };
+          autoSearchPicked = true;
+        }
+        const label = document.createElement("label");
+        label.className = "mcp-tool-item" + (isWebsearch ? " mcp-tool-websearch" : "");
+        const cb = document.createElement("input");
+        cb.type = "checkbox";
+        cb.checked = !!mcpSelectedTools[qualified];
+        const desc = tool.description ? ` — ${tool.description}` : "";
+        const badge = isWebsearch ? " 🌐" : "";
+        label.appendChild(cb);
+        const span = document.createElement("span");
+        span.textContent = tool.name + badge + (desc || "");
+        label.appendChild(span);
+        cb.addEventListener("change", () => {
+          if (cb.checked) {
+            mcpSelectedTools[qualified] = {
+              qualified,
+              name: tool.name,
+              description: tool.description || "",
+              params: tool.inputSchema || { type: "object", properties: {} },
+            };
+          } else {
+            delete mcpSelectedTools[qualified];
+          }
+        });
+        group.appendChild(label);
+      });
+      list.appendChild(group);
+    });
+    if (autoSearchPicked) {
+      const note = document.createElement("div");
+      note.className = "mcp-tools-note";
+      note.textContent = "🌐 Websearch-Tool über MCP automatisch aktiviert.";
+      list.prepend(note);
+    }
+    return true;
+  } catch (e) {
+    pill.textContent = "MCP: Fehler";
+    console.error("MCP tools error:", e);
+    return false;
+  }
+}
+
+function setupMcpControls() {
+  const pill = el("mcpPill");
+  const panel = el("mcpToolsPanel");
+  if (!pill || !panel) return;
+  pill.addEventListener("click", async () => {
+    const willOpen = panel.classList.contains("hidden");
+    if (willOpen && !panel.dataset.loaded) {
+      const loaded = await loadMcpTools();
+      if (loaded) panel.dataset.loaded = "1";
+    }
+    panel.classList.toggle("hidden", !willOpen);
+    pill.setAttribute("aria-expanded", willOpen ? "true" : "false");
+  });
+  document.addEventListener("click", (e) => {
+    if (!panel.classList.contains("hidden") &&
+        !panel.contains(e.target) && !pill.contains(e.target)) {
+      panel.classList.add("hidden");
+      pill.setAttribute("aria-expanded", "false");
+    }
+  });
 }
 
 async function updateConfigOnServer(newCfg) {
@@ -150,10 +323,32 @@ async function updateConfigOnServer(newCfg) {
   return await res.json();
 }
 
+async function fetchAdminConfig() {
+  if (!adminToken) return null;
+  const res = await fetch("/api/admin/config", {
+    headers: { "X-Admin-Auth": adminToken },
+  });
+  if (!res.ok) throw new Error(`Admin-Config-Fehler: ${res.status}`);
+  return await res.json();
+}
+
+async function saveAdminConfig(cfg) {
+  if (!adminToken) throw new Error("Nicht eingeloggt.");
+  const res = await fetch("/api/admin/config/update", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Admin-Auth": adminToken },
+    body: JSON.stringify(cfg),
+  });
+  if (!res.ok) throw new Error(`Admin-Config-Update-Fehler: ${res.status}`);
+  return await res.json();
+}
+
 async function sendChatMessage(message, model, chatId) {
   const body = { messages: [message] };
   if (model) body.model = model;
   if (chatId != null) body.chat_id = chatId;
+  const toolPayload = buildToolPayload(mcpSelectedTools);
+  if (toolPayload.length) body.tools = toolPayload;
   const res = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -191,6 +386,22 @@ function appendMessage(role, text, clear = false) {
   msg.textContent = text;
   container.appendChild(msg);
   container.scrollTop = container.scrollHeight;
+}
+
+// Denkanzeige: wird angezeigt, während auf die Antwort gewartet wird.
+function showThinking() {
+  const container = el("messages");
+  const empty = el("emptyState");
+  if (empty) empty.remove();
+  const msg = document.createElement("div");
+  msg.className = "message assistant thinking";
+  msg.innerHTML = '<span class="thinking-dot"></span><span class="thinking-dot"></span><span class="thinking-dot"></span><span class="thinking-text">Denkt nach…</span>';
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
+  return msg;
+}
+function removeThinking(el) {
+  if (el && el.parentNode) el.parentNode.removeChild(el);
 }
 
 function appendImageMessage(urls, clear = false) {
@@ -313,16 +524,80 @@ async function renderChatList() {
     chats.forEach((c) => {
       const item = document.createElement("div");
       item.className = "conversation-item";
+      if (c.archived) item.classList.add("archived");
       if (c.id === currentChatId) item.classList.add("active");
       item.dataset.id = String(c.id);
       const title = c.name && c.name !== "New Chat" ? c.name : "Neuer Chat";
-      item.innerHTML = `<span class="conv-title">${escapeHtml(title)}</span>`;
+      const actions = `
+        <span class="conv-actions">
+          <button class="conv-act" data-action="rename" title="Umbenennen">✏️</button>
+          <button class="conv-act" data-action="archive" title="${c.archived ? "Wiederherstellen" : "Archivieren"}">${c.archived ? "↩️" : "🗄️"}</button>
+          <button class="conv-act" data-action="export" title="Exportieren">⬇️</button>
+        </span>`;
+      item.innerHTML = `<span class="conv-title">${escapeHtml(title)}</span>${actions}`;
       list.appendChild(item);
     });
     return chats;
   } catch (e) {
     console.error("renderChatList error:", e);
     return [];
+  }
+}
+
+async function renameChat(chatId) {
+  const name = prompt("Neuer Name für den Chat:");
+  if (name === null) return;
+  if (!name.trim()) return;
+  try {
+    const res = await fetch(`/api/chat/${chatId}/rename`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: name.trim() }),
+    });
+    if (!res.ok) throw new Error(`Rename-Fehler (${res.status})`);
+    await renderChatList();
+  } catch (e) {
+    console.error("Rename error:", e);
+    alert("Umbenennen fehlgeschlagen: " + e.message);
+  }
+}
+
+async function archiveChat(chatId, archived) {
+  try {
+    const res = await fetch(`/api/chat/${chatId}/archive`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ archived }),
+    });
+    if (!res.ok) throw new Error(`Archive-Fehler (${res.status})`);
+    if (archived && currentChatId === chatId) {
+      currentChatId = null;
+      resetChat();
+    }
+    await renderChatList();
+  } catch (e) {
+    console.error("Archive error:", e);
+    alert("Archivieren fehlgeschlagen: " + e.message);
+  }
+}
+
+async function exportChat(chatId, format = "markdown") {
+  try {
+    const res = await fetch(`/api/chat/${chatId}/export?format=${format}`);
+    if (!res.ok) throw new Error(`Export-Fehler (${res.status})`);
+    const data = await res.json();
+    const blob = new Blob(
+      [format === "json" ? JSON.stringify(data, null, 2) : data.content],
+      { type: format === "json" ? "application/json" : "text/markdown" }
+    );
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `chat-${chatId}.${format === "json" ? "json" : "md"}`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (e) {
+    console.error("Export error:", e);
+    alert("Export fehlgeschlagen: " + e.message);
   }
 }
 
@@ -468,6 +743,76 @@ function collectProviderDrafts() {
   }));
 }
 
+// --- Admin-Tab: Formular für Provider/Modelle/MCP-Server ---
+const ADMIN_PROVIDER_FIELDS = [
+  { k: "name", label: "Name *", required: true, ph: "z.B. OpenRouter" },
+  { k: "base_url", label: "Base URL *", required: true, ph: "https://.../v1" },
+  { k: "api_key", label: "API-Key", type: "password", ph: "sk-…" },
+];
+const ADMIN_MODEL_FIELDS = [{ k: "name", label: "Name *", required: true, ph: "z.B. gpt-4o" }];
+const ADMIN_MCP_FIELDS = [
+  { k: "name", label: "Name *", required: true, ph: "z.B. mcpo" },
+  { k: "url", label: "URL *", required: true, ph: "http://mcpo:8000" },
+  { k: "api_key", label: "API-Key", type: "password", ph: "…" },
+];
+
+function renderAdminList(listId, items, fieldDefs, opts = {}) {
+  const box = el(listId);
+  if (!box) return;
+  box.innerHTML = "";
+  items.forEach((item, i) => {
+    const card = document.createElement("div");
+    card.className = "provider-card";
+    let rows = fieldDefs
+      .map(
+        (f) => `
+      <div class="provider-row"><label style="flex:1;min-width:0;">${f.label}
+        <input id="${listId}-f${i}-${f.k}" type="${f.type || "text"}" value="${escapeHtml(item[f.k] || "")}" placeholder="${f.ph || ""}" ${f.required ? "required" : ""} />
+      </label></div>`
+      )
+      .join("");
+    if (opts.models)
+      rows += `
+      <div class="provider-row"><label style="flex:1;min-width:0;">Modelle (kommagetrennt)
+        <input id="${listId}-f${i}-models" type="text" value="${escapeHtml((item.models || []).join(", "))}" placeholder="gpt-4o, claude-3" />
+      </label></div>`;
+    if (opts.selected)
+      rows += `
+      <div class="provider-row"><label class="checkbox-field">
+        <input id="${listId}-f${i}-selected" type="checkbox" ${item.selected ? "checked" : ""} />
+        <span>Standard-Anbieter</span>
+      </label></div>`;
+    rows += `
+      <div class="provider-actions">
+        <button type="button" class="ghost-btn" data-remove>Entfernen</button>
+      </div>`;
+    card.innerHTML = rows;
+    card.querySelector("[data-remove]").addEventListener("click", () => {
+      items.splice(i, 1);
+      renderAdminList(listId, items, fieldDefs, opts);
+    });
+    box.appendChild(card);
+  });
+}
+
+function collectAdminList(listId, items, fieldDefs, opts = {}) {
+  return items.map((item, i) => {
+    const out = { id: item.id };
+    fieldDefs.forEach((f) => {
+      const v = (el(`${listId}-f${i}-${f.k}`)?.value || "").trim();
+      if (f.required && !v) throw new Error(`${f.label} (Zeile ${i + 1}) fehlt.`);
+      out[f.k] = v;
+    });
+    if (opts.models)
+      out.models = (el(`${listId}-f${i}-models`)?.value || "")
+        .split(",")
+        .map((m) => m.trim())
+        .filter(Boolean);
+    if (opts.selected) out.selected = !!el(`${listId}-f${i}-selected`)?.checked;
+    return out;
+  });
+}
+
 // Sidebar-Events
 const setupSidebar = () => {
   const sidebar = el("sidebar");
@@ -508,12 +853,48 @@ document.addEventListener("DOMContentLoaded", async () => {
   loadThemeAndMode();
   setupSidebar();
   setupDesignListeners();
+  setupHistorySearch();
+  setupMcpControls();
 
   // New chat button
   el("newChatButton").addEventListener("click", createNewChat);
 
+  // Archiv-Toggle
+  const archiveToggle = el("archiveToggle");
+  if (archiveToggle) {
+    archiveToggle.addEventListener("click", () => {
+      showArchived = !showArchived;
+      archiveToggle.classList.toggle("active", showArchived);
+      archiveToggle.textContent = showArchived ? "🗄️ Nur aktive Chats" : "🗄️ Archiv anzeigen";
+      renderChatList();
+    });
+  }
+
+  // Export-Button in der Top-Bar (exportiert den aktuellen Chat)
+  const exportBtn = el("exportChatButton");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", () => {
+      if (currentChatId == null) {
+        alert("Kein Chat ausgewählt.");
+        return;
+      }
+      exportChat(currentChatId);
+    });
+  }
+
   // Conversation list click -> switch chats
   el("conversationList").addEventListener("click", async (e) => {
+    const actBtn = e.target.closest(".conv-act");
+    if (actBtn) {
+      const item = actBtn.closest(".conversation-item");
+      if (!item) return;
+      const chatId = Number(item.dataset.id);
+      const action = actBtn.dataset.action;
+      if (action === "rename") return renameChat(chatId);
+      if (action === "archive") return archiveChat(chatId, !item.classList.contains("archived"));
+      if (action === "export") return exportChat(chatId);
+      return;
+    }
     let target = e.target;
     while (target !== null && !target.classList.contains("conversation-item")) {
       target = target.parentElement;
@@ -561,6 +942,7 @@ document.addEventListener("DOMContentLoaded", async () => {
   const select = el("modelSelect");
 
   async function populateModelSelect() {
+    const prev = select.value;
     select.innerHTML = "";
     const models = await fetchModels();
     if (models.length) {
@@ -570,7 +952,9 @@ document.addEventListener("DOMContentLoaded", async () => {
         opt.textContent = m;
         select.appendChild(opt);
       });
-      if (config?.chat?.model && models.includes(config.chat.model)) {
+      if (prev && models.includes(prev)) {
+        select.value = prev;
+      } else if (config?.chat?.model && models.includes(config.chat.model)) {
         select.value = config.chat.model;
       }
     } else if (config?.chat?.model) {
@@ -608,6 +992,32 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
       await populateModelSelect();
     });
+    // Refresh-Models-Button
+    const refreshBtn = el("refreshModels");
+    if (refreshBtn) {
+      refreshBtn.addEventListener("click", async () => {
+        refreshBtn.disabled = true;
+        refreshBtn.textContent = "⏳";
+        try {
+          const res = await fetch("/api/providers/refresh-models", { method: "POST" });
+          if (!res.ok) throw new Error(`Refresh-Fehler (${res.status})`);
+          const data = await res.json();
+          select.innerHTML = "";
+          (data.models || []).forEach((m) => {
+            const opt = document.createElement("option");
+            opt.value = m;
+            opt.textContent = m;
+            select.appendChild(opt);
+          });
+        } catch (e) {
+          console.error("Models refresh error:", e);
+          alert("Modelle konnten nicht aktualisiert werden: " + e.message);
+        } finally {
+          refreshBtn.disabled = false;
+          refreshBtn.textContent = "🔄";
+        }
+      });
+    }
     await populateModelSelect();
   } else {
     providerSelect.innerHTML = "";
@@ -670,7 +1080,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     try {
       if (mode === "image") {
-        const resp = await generateImage(finalText);
+        const thinking = showThinking();
+        let resp;
+        try {
+          resp = await generateImage(finalText);
+        } finally {
+          removeThinking(thinking);
+        }
         const urls = (resp.images || []).map((i) => i.url);
         if (urls.length) {
           appendImageMessage(urls);
@@ -679,13 +1095,19 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       } else {
         const model = select.value || undefined;
-        const resp = await sendChatMessage(
-          { role: "user", content: finalText },
-          model,
-          currentChatId
-        );
-        const assistantText = resp.content || "";
-        currentChatId = resp.chat_id;
+        const thinking = showThinking();
+        let assistantText;
+        try {
+          const resp = await sendChatMessage(
+            { role: "user", content: finalText },
+            model,
+            currentChatId
+          );
+          assistantText = resp.content || "";
+          currentChatId = resp.chat_id;
+        } finally {
+          removeThinking(thinking);
+        }
         appendMessage("assistant", assistantText);
 
         history.push({ role: "user", content: finalText });
@@ -742,22 +1164,91 @@ document.addEventListener("DOMContentLoaded", async () => {
         "online",
         config.chat?.name ? `Verbunden: ${config.chat.name}` : "Kein Chat-Backend konfiguriert"
       );
-      el("mcpPill").textContent = "MCP: " + (config.mcp?.enabled ? "aktiv" : "inaktiv");
-      el("mcpPill").style.display = "";
+      loadMcpTools();
     } else {
       setStatus("error", "Backend nicht erreichbar");
     }
   });
 
-  // Settings-Modal + Tabs
+  // Admin-Tab: Formular für Provider/Modelle/MCP-Server
   const settingsModal = el("settingsModal");
   const openSettings = () => settingsModal.classList.remove("hidden");
   const closeSettings = () => settingsModal.classList.add("hidden");
-  el("settingsButton").addEventListener("click", openSettings);
-  el("closeSettings").addEventListener("click", closeSettings);
+  const adminState = { providers: [], models: [], mcp_servers: [] };
+  let adminFormReady = false;
+
+  const setAdminFormReady = (ready) => {
+    adminFormReady = ready;
+    el("adminSaveForm").disabled = !ready;
+  };
+
+  const renderAdminForm = () => {
+    renderAdminList("adminProviders", adminState.providers, ADMIN_PROVIDER_FIELDS, {
+      models: true,
+      selected: true,
+    });
+    renderAdminList("adminModels", adminState.models, ADMIN_MODEL_FIELDS);
+    renderAdminList("adminMcpServers", adminState.mcp_servers, ADMIN_MCP_FIELDS);
+  };
+
+  const loadAdminForm = async () => {
+    setAdminFormReady(false);
+    try {
+      const cfg = await fetchAdminConfig();
+      if (!cfg) {
+        alert("Nicht eingeloggt — bitte erst Login.");
+        return;
+      }
+      adminState.providers = cfg.providers || [];
+      adminState.models = cfg.models || [];
+      adminState.mcp_servers = cfg.mcp_servers || [];
+      renderAdminForm();
+      setAdminFormReady(true);
+    } catch (e) {
+      alert("Admin-Konfiguration konnte nicht geladen werden: " + e.message);
+    }
+  };
+
+  el("adminAddProvider").addEventListener("click", () => {
+    adminState.providers.push({});
+    renderAdminForm();
+  });
+  el("adminAddModel").addEventListener("click", () => {
+    adminState.models.push({});
+    renderAdminForm();
+  });
+  el("adminAddMcp").addEventListener("click", () => {
+    adminState.mcp_servers.push({});
+    renderAdminForm();
+  });
+
+  el("adminSaveForm").addEventListener("click", async () => {
+    if (!adminFormReady) return;
+    try {
+      const cfg = {
+        providers: collectAdminList("adminProviders", adminState.providers, ADMIN_PROVIDER_FIELDS, {
+          models: true,
+          selected: true,
+        }),
+        models: collectAdminList("adminModels", adminState.models, ADMIN_MODEL_FIELDS),
+        mcp_servers: collectAdminList("adminMcpServers", adminState.mcp_servers, ADMIN_MCP_FIELDS),
+      };
+      await saveAdminConfig(cfg);
+      alert("Admin-Konfiguration gespeichert.");
+      await loadAdminForm();
+    } catch (e) {
+      alert(`Fehler beim Speichern: ${e.message}`);
+    }
+  });
+  // Beim Öffnen des Settings-Modals aktuelle Admin-Konfiguration laden
   settingsModal.addEventListener("click", (e) => {
     if (e.target === settingsModal) closeSettings();
   });
+  el("settingsButton").addEventListener("click", () => {
+    openSettings();
+    loadAdminForm();
+  });
+  el("closeSettings").addEventListener("click", closeSettings);
 
   document.querySelectorAll(".tab-btn").forEach((btn) => {
     btn.addEventListener("click", () => {
