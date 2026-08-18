@@ -3,6 +3,8 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://github.com/jbkunama1/hAI.MyLLMChat)
 [![LLM](https://img.shields.io/badge/LLM-OpenAI%20Compatible-10a37f?style=for-the-badge&logo=openai&logoColor=white)](https://github.com/jbkunama1/hAI.MyLLMChat)
 [![MCP](https://img.shields.io/badge/MCP-Server-6f42c1?style=for-the-badge&logo=mcp&logoColor=white)](https://github.com/jbkunama1/hAI.MyLLMChat)
+[![9router](https://img.shields.io/badge/9router-LLM%20Provider-ff6b6b?style=for-the-badge&logo=openai&logoColor=white)](https://9router.com)
+[![AnythingMCP](https://img.shields.io/badge/AnythingMCP-MCP%20Server-00d4aa?style=for-the-badge&logo=mcp&logoColor=white)](https://anythingmcp.com)
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](LICENSE)
 
 
@@ -32,16 +34,26 @@ HAI_ADMIN_USER=admin
 HAI_ADMIN_PASSWORD=changeme
 HAI_ADMIN_TOKEN=
 
-# Standard-Chat-Provider (OpenAI-kompatibel, z. B. OpenRouter)
+# Standard-Chat-Provider (OpenAI-kompatibel, z. B. OpenRouter oder 9router)
 HAI_CHAT_API_KEY=
 HAI_DEFAULT_CHAT_BASE_URL=https://openrouter.ai/api/v1
 HAI_DEFAULT_CHAT_MODEL=openai/gpt-4o-mini
 HAI_DEFAULT_CHAT_NAME=OpenRouter
 
+# 9router als LLM Provider (empfohlen): einfach HAI_DEFAULT_CHAT_* auf 9router setzen
+# HAI_DEFAULT_CHAT_BASE_URL=https://9router.ai/api/v1
+# HAI_DEFAULT_CHAT_API_KEY=<dein-9router-api-key>
+# HAI_DEFAULT_CHAT_MODEL=google/gemini-pro
+# HAI_DEFAULT_CHAT_NAME=9router
+
 # Bildgenerierung (optional)
 HAI_IMAGE_API_KEY=
 HAI_DEFAULT_IMAGE_BASE_URL=
 HAI_DEFAULT_IMAGE_NAME=
+
+# AnythingMCP als MCP Server: HAI_MCP_* auf AnythingMCP-Instanz zeigen
+# HAI_MCP_BASE_URL=http://anythingmcp:8080
+# HAI_MCP_TOKEN=sk-mcp-xxx
 
 # MCP-Integration (optional)
 HAI_MCP_API_KEY=
@@ -59,7 +71,9 @@ Docker-Build als `build-args` übergeben und zur Laufzeit als `ENV` im Image abg
 | Secret          | Beispielwert                                | Zweck                                    |
 |-----------------|---------------------------------------------|------------------------------------------|
 | `ADMIN_TOKEN`   | `sk-admin-9f3a...`                          | Admin-Token für die Container-App        |
-| `MCP_API_KEY`   | `sk-mcp-2c8b...`                            | API-Key für die MCP-Integration          |
+| `MCP_API_KEY`   | `sk-mcp-2c8b...`                            | API-Key für die MCP-Integration          | 
+| `HAIN_ROUTER_API_KEY` | `sk-9router-12345`                     | 9router LLM Provider API Key             | 
+| `HAIN_ROUTER_DEFAULT_MODEL` | `google/gemini-pro`                | Standard-9router Modell                  |
 
 *Hinweis: `DOCKER_REGISTRY` wird nur als `build-arg` in GitHub Actions verwendet und muss nicht als Secret in den Container injiziert werden.*
 
@@ -127,12 +141,21 @@ services:
 - Wird über die Settings‑UI im Browser verwaltet.
 - Daten (Chats, Uploads etc.) landen ebenfalls unter `/data`.
 
-## Mehrere Provider
+### Multiple Provider & 9router
 
-- Der Chat ist über beliebige OpenAI‑kompatible APIs nutzbar.
-- Die Standard‑Provider lassen sich per Umgebungsvariablen setzen (`HAI_DEFAULT_CHAT_*`, `HAI_DEFAULT_IMAGE_*`).
-- In der Settings‑UI können weitere Provider/Modelle hinterlegt und pro Chat gewechselt werden.
-- Die MCP‑Integration wird über `HAI_MCP_ENABLED` aktiviert (Basis‑URL und Token über `HAI_MCP_BASE_URL` / `HAI_MCP_TOKEN`).
+Der Chat ist über beliebige OpenAI‑kompatible APIs nutzbar. Die Standard‑Provider lassen sich per Umgebungsvariablen setzen (`HAI_DEFAULT_CHAT_*`, `HAI_DEFAULT_IMAGE_*`). In der Settings‑UI können weitere Provider/Modelle hinterlegt und pro Chat gewechselt werden. Für die Nutzung von **9router** als LLM Provider einfach die Umgebungsvariablen `HAI_DEFAULT_CHAT_BASE_URL`, `HAI_DEFAULT_CHAT_API_KEY` und `HAI_DEFAULT_CHAT_MODEL` auf die 9router‑Endpoints setzen.
+
+### AnythingMCP Integration
+
+Die AnythingMCP Integration lässt sich über die Umgebungsvariablen `HAI_MCP_BASE_URL` und `HAI_MCP_TOKEN` aktivieren. Hier ein Beispiel für die Konfiguration von AnythingMCP:
+
+```env
+HAI_MCP_ENABLED=true
+HAI_MCP_BASE_URL=http://anythingmcp:8080
+HAI_MCP_TOKEN=sk-mcp-xxxxxx
+```
+
+Die MCP‑Integration wird über `HAI_MCP_ENABLED` aktiviert (Basis‑URL und Token über `HAI_MCP_BASE_URL` / `HAI_MCP_TOKEN`).
 
 ## Sicherheitshinweis
 
