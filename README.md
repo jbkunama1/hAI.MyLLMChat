@@ -35,7 +35,7 @@ HAI_ADMIN_PASSWORD=changeme
 HAI_ADMIN_TOKEN=
 
 # Standard-Chat-Provider (OpenAI-kompatibel, z. B. OpenRouter oder 9router)
-HAI_CHAT_API_KEY=
+HAI_DEFAULT_CHAT_API_KEY=
 HAI_DEFAULT_CHAT_BASE_URL=https://openrouter.ai/api/v1
 HAI_DEFAULT_CHAT_MODEL=openai/gpt-4o-mini
 HAI_DEFAULT_CHAT_NAME=OpenRouter
@@ -47,7 +47,7 @@ HAI_DEFAULT_CHAT_NAME=OpenRouter
 # HAI_DEFAULT_CHAT_NAME=9router
 
 # Bildgenerierung (optional)
-HAI_IMAGE_API_KEY=
+HAI_DEFAULT_IMAGE_API_KEY=
 HAI_DEFAULT_IMAGE_BASE_URL=
 HAI_DEFAULT_IMAGE_NAME=
 
@@ -71,9 +71,9 @@ Docker-Build als `build-args` übergeben und zur Laufzeit als `ENV` im Image abg
 | Secret          | Beispielwert                                | Zweck                                    |
 |-----------------|---------------------------------------------|------------------------------------------|
 | `ADMIN_TOKEN`   | `sk-admin-9f3a...`                          | Admin-Token für die Container-App        |
-| `MCP_API_KEY`   | `sk-mcp-2c8b...`                            | API-Key für die MCP-Integration          | 
-| `HAIN_ROUTER_API_KEY` | `sk-9router-12345`                     | 9router LLM Provider API Key             | 
-| `HAIN_ROUTER_DEFAULT_MODEL` | `google/gemini-pro`                | Standard-9router Modell                  |
+| `MCP_API_KEY`   | `sk-mcp-2c8b...`                            | API-Key für die MCP-Integration          |
+| `HAI_DEFAULT_CHAT_API_KEY` | `sk-9router-12345`                | LLM Provider API Key (z.B. 9router)     |
+| `HAI_DEFAULT_CHAT_MODEL` | `google/gemini-pro`              | Standard LLM-Modell                    |
 
 *Hinweis: `DOCKER_REGISTRY` wird nur als `build-arg` in GitHub Actions verwendet und muss nicht als Secret in den Container injiziert werden.*
 
